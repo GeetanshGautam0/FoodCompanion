@@ -1,0 +1,258 @@
+The Basics:
+    All communications must be made over TCP connections.
+    The original (now "LEGACY SPEC") specification is still accepted however its use is discouraged.
+
+    All RSA keys are 512-bit.
+
+The "New Generation" Specification:
+    Each transmission (TX) consists of 4 sections:
+        TX_HDR      NG Header Section
+        TX_EXH      Extra header sections
+        TX_CHK      Message hash
+        TX_MSG      Message
+
+To establish a new session:
+    1. MSGINTENT = 'S'
+    2. H_SES_TOK = '00000000000000000000000000000000'
+    3. H_CLT_UID = '0000000000000000000000000000000000'
+    4. EXH_KEY_MD5 = '<EXH_NO_DATA>'
+    5. TX_MSG = '<EstCon>' + <A RSA public key>
+
+    * Note that addition of the RSA public key. This is to implement end-to-end asymmetric encryption.
+    * Note that the legacy com spec does not implement end-to-end encryption, rather only one-way encryption.
+
+NG Header Format:
+    The NG header consists of 10 keys, in the following order:
+
+    MSGINTENT:      Intent of message.
+            DESC:       Choose whether you're trying to establish a new connection or continue a previously-established connection.
+            LENGTH:     1 character
+            TYPE:       CHAR
+            OPTIONS:    'C' or 'S'
+
+            'C'         Continue a previously-established session.
+            'S'         Create a new session.
+
+    H_APP_VIS:      App Version Information String
+            DESC:       Date and time of app build (checks for compatability)
+            LENGTH:     14 characters
+            TYPE:       INT
+            FORMAT:     Use the standard DATETIME format.
+
+    H_COM_CHK:      COM CHECKSUM
+            DESC:       Checksum of _template, _legacy, and _ng (MD5; concat)
+            LENGTH:     32 * 3
+            TYPE:       HEX_STRING
+
+    H_HDR_VER:      Header version
+            DESC:       Header struct version.
+            LENGTH:     3 character
+            TYPE:       HEX_STRING
+            NOTE:       Header versions start at 1, not 0.
+
+    H_MC_TYPE:      Machine Type
+            DESC:       Whether the TX machine is a client or the server.
+            LENGTH:     1 character
+            TYPE:       BIT
+
+            1:          tx = client; rx = server.
+            0:          rx = client; tx = server.
+
+    H_SES_TOK:      Session token
+            DESC:       Session token created by the server.
+            LENGTH:     32 characters
+            TYPE:       STRING
+
+            Pad w/ 0 if MSGINTENT == S
+
+    H_TX_TIME:      Tx Time
+            DESC:       Time at which the data packet was prepared.
+            LENGTH:     14 characters
+            TYPE:       INT
+            FORMAT:     Use the standard DATETIME format.
+
+    H_CLT_UID:      Client UID
+            DESC:       Client UID sent by server.
+            LENGTH:     34 characters
+            TYPE:       HEX_STRING
+
+            Pad w/ 0 if MSGINTENT == S
+
+    H_MSG_LEN:      TX_MSG Section Length
+            DESC:       Length of TX_MSG
+            LENGTH:     6 characters
+            TYPE:       HEX_STRING
+
+    H_HSH_LEN:      TX_CHK Section Length
+            DESC:       Length of TX_CHK
+            LENGTH:     6 characters
+            TYPE:       HEX_STRING
+
+    EXT_HDR_L:      TX_EXH Section Length
+            DESC:       Length of TX_EXH
+            LENGTH:     3 characters
+            TYPE:       HEX_STRING
+
+    Total Length: 210 characters.
+
+
+TX_EXH format:
+    EXH_PLATFORM:       Platform ID
+    EXH_MACHINE:        Machine type
+    EXH_MAC_ADDR:       Client MAC Address
+    EXH_KEY_MD5:        RSA Public Key MD5 Hash
+
+    NOTE:               The server does not send extended headers. EXH_HDR_L in TX_HDR is set to 0.
+    NOTE:               Use '<EXH_DELIM>' as a delimiter between the data values.
+    NOTE:               Use '<EXH_NO_DATA>' to indicate that no data is available for a data value.
+
+TX_CHK format:
+    Use the SHA-256 algorithm to generate the message hash.
+
+    NOTE:               No TX_CHK section is supplied w/ <EstCon> requests.
+
+TX_MSG:
+    If you're establishing a new session, use the command '<EstCon>'
+    If you're continuing a session, use the "form" sent back by the server.
+
+Forms:
+    Forms have two sections:
+        1. Command
+        2. Arguments
+
+    Commands:
+        There are four BASE commands:
+            1. GET      Get record(s)
+            2. UPD      Update record
+            3. DEL      Delete record/Remove from list
+            4. NEW      Create record/Add to a list
+
+        There are two SELECTORS:
+            1. P        Patient records
+            2. F        Food records
+
+        There are 34 MODIFIERS:
+            1. RCD      Record (PtR/FdR)
+            2. DET      Diet
+            3. LST      List
+            4. OMI      Omission
+
+    Fields (Arguments):
+
+        Standard PTR (SELECTORS.P) Fields:
+            &pid;       Patient ID              (int)
+            &iid;       Institution ID          (str)
+            &dob;       Patient DOB             (int)           * Format as the standard DATETIME format.
+
+        To ADD a new food item:
+            &name;      Name of food item       (str)
+            &bld;       Breakfast/Lunch/Dinner  (char/str)      * Use 'B', 'L', and/or 'D'
+            &cat;       Food Category ID        (int)           * Coincides w/ sc_data/enums/FoodCategory
+            &cal;       Calories                (float)
+            &cst;       Carbs -> Starches       (float)
+            &csu;       Carbs -> Sugars         (float)
+            &cfi;       Carbs -> Fiber          (float)
+            &ftr;       Trans fat               (float)
+            &fsa;       Saturated fat           (float)
+            &pco;       Complete protein source (bool)          * Use 0/1
+            &pro;       Protein                 (float)
+            &ssc;       Serving Size Count      (float)
+            &ssu;       Serving Size Unit       (int)           * Coincides w/ sc_data/enums/ServingSizeUnit
+            &odiets;    Omitted diet order IDs  (List[int])     * Coincides w/ diet IDs. ** delim: ','
+
+        Miscellaneous Fields:
+            &id;        ID (any ID)             (int)
+            &diet;      Diet order ID           (int)
+            &pname;     Patient name            (str)           * Use the format "FIRST.LAST[.MIDDLE]"
+            &field;     Field name              (str)           * pid/name/diet/iid/dob
+                                                                * name/bld/cat/cal/cst/csu/cfi/ftr/fsa/pco/pro/ssc/ssu/odiets
+            &value;     New value               (str)
+
+        Security/Validation Fields (for sensitive data):
+            &userID;    User ID                 (int)
+            &userAC;    User Access Code        (str)
+
+Accepted commands (updated 12/AUG/2024):
+    * Note that all commands must be encrypted w/ the public key sent by the server.
+    * Any unencrypted commands will be ignored.
+
+    * Commands with "**" appended to them require user ID and an access code.
+
+    -------------------------------------------------------------------------------------------------------------------------------------
+    Command             Description                             Steps                                               Needs Authentication?
+    -------------------------------------------------------------------------------------------------------------------------------------
+    "GET-P-RCD"         Get patient record.                     FORM-PTR-1a.                                        -
+    "GET-P-LST"         Get patient list.                       (1) FORM-PTR-1b. (2) Returns patient list.          **
+    "NEW-P-RCD"         Create a new patient record.            FORM-PTR-2.                                         **
+    "UPD-P-DET"         Update a patient's diet order.          FORM-PTR-3a.                                        **
+    "UPD-P-RCD"         Update a patient's record.              FORM-PTR-3b.                                        **
+    "DEL-P-RCD"         Delete a patient record.                FORM-PTR-4.                                         **
+
+    "GET-F-LST"         Get a list of food items.               -                                                   -
+    "NEW-F-RCD"         Create a new food record.               FORM-FDR-1.                                         **
+    "UPD-F-RCD"         Update a food record.                   FORM-FDR-2.                                         **
+    "NEW-F-OMI"         Add diet order to omitted list.         FORM-FDR-3a.                                        **
+    "DEL-F-OMI"         Remove diet order from omitted list.    FORM-FDR-3b.                                        **
+    "GET-F-DET"         Get a list of diet orders.              -                                                   -
+    "NEW-F-DET"         Create a new diet order.                FORM-FDR-4.                                         **
+    -------------------------------------------------------------------------------------------------------------------------------------
+
+FORM-PTR-1a
+    "PTR-1a<[&pid;].[&iid;].[&dob;]>"
+
+FORM-PTR-1b
+    "PTR-1b<[&iid;].[&userID;].[&userAC;]>"
+
+FORM-PTR-2
+    "PTR-2 <[&pid;].[&iid;].[&dob;].[&pname].[&diet]>"
+
+FORM-PTR-3a
+    "PTR-3a<[&pid;].[&iid;].[&dob;].[&diet]>"
+
+FORM-PTR-3b
+    "PTR-3b<[&pid;].[&iid;].[&dob;].[&field;].[&value;]>"
+
+FORM-PTR-4
+    "PTR-4 <[&pid;].[&iid;].[&dob]>"
+
+FORM-FDR-1
+    "FDR-1 <[&name;].[&bld;].[&cat;].[&cal;].[&cst;].[&csu;].[&cfi;].[&ftr;].[&fsa;].[&pco;].[&pro;].[&ssc;].[&ssu;].[&odiets;]>"
+
+FORM-FDR-2
+    "FDR-2 <[&field;].[&value;]>"
+
+FORM-FDR-3a
+    "FDR-3a<[&id;].[&diet;]>"
+
+FORM-FDR-3b
+    "FDR-3b<[&id;].[&diet;]>"
+
+FORM-FDR-4
+    "FDR-4 <[&name;]>"
+
+
+Responses:
+
+    [A] Errors
+
+    --------------------------------------------------------------------------------------------------------------------
+    Response        Description                                                 Other Info
+    --------------------------------------------------------------------------------------------------------------------
+    ERR.GNRL        General Error                                               Error information attached as plaintext.
+    ERR.HEDR        Bad Header Format (NG/LEGACY/EXH)                           "
+    ERR.RQST        Bad Request                                                 "
+    ERR.TRNS        Bad Transmission (TX_CHK-related errors)                    Checksum of received message.
+    ERR.RCNF        Patient not found                                           Error information attached as plaintext.
+    ERR.SESS        Invalid Session Token / Bad PubKey checksum / Bad CUID      "CUID" or "SESTOK" or "PKCHK"
+    ERR.INCM        Incomplete message                                          Error information attached as plaintext.
+    ERR.CAVR        Incompatible Version                                        "
+    --------------------------------------------------------------------------------------------------------------------
+
+    [B] Success/General Responses
+
+    --------------------------------------------------------------------------------------------------------------------
+    Response        Description                                                 Other Info
+    --------------------------------------------------------------------------------------------------------------------
+    RSP.CEST        Connection Established.                                     [ST]:DELIM:[CUID]:DELIM:[PKEY]
+    RSP.OKAY        General "OKAY" response.                                    Plaintext string (optional).
+    --------------------------------------------------------------------------------------------------------------------

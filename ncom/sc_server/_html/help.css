@@ -1,0 +1,11 @@
+body {
+    background:         #f1d77e;
+    color:              #000000;
+    font-family:        monospace;
+    white-space:        pre;
+    line-height:        1em;
+}
+
+p {
+    line-height:        0.95em;
+}
