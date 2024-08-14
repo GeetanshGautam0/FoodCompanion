@@ -277,20 +277,32 @@ class InstitutionID(str):
     def value(self) -> str:
         return self.__value__
 
+    def __repr__(self) -> str:
+        return f'{self.__class__.__name__}({self.value})'
+
+    def __str__(self) -> str:
+        return self.__repr__()
+
 
 class PatientID(int):
     def __init__(self, dob) -> None:
-        self.__value__ = dob
+        self.__value__ = int(dob)
         int.__init__(dob)
 
     @property
     def value(self) -> int:
         return self.__value__
 
+    def __repr__(self) -> str:
+        return f'{self.__class__.__name__}({self.value})'
+
+    def __str__(self) -> str:
+        return self.__repr__()
+
 
 class FormattedDate(int):
     def __init__(self, v) -> None:
-        self.__value__ = v
+        self.__value__ = int(v)
         int.__init__(v)  # type: ignore
 
         self._on_init()  # Check the format.
@@ -315,6 +327,12 @@ class FormattedDate(int):
     @property
     def value(self) -> int:
         return self.__value__
+
+    def __repr__(self) -> str:
+        return f'{self.__class__.__name__}({self.value})'
+
+    def __str__(self) -> str:
+        return self.__repr__()
 
 
 class FormattedName(str):

@@ -62,11 +62,13 @@ FRMT = FRMT_t(
 class HDR_t(Constants):
     RSA_KEY_TYPE:           str
     PAD_BYTE:               bytes
+    LEG_PAD_BYTE:           bytes
 
 
 HDR = HDR_t(
     RSA_KEY_TYPE='PEM',
-    PAD_BYTE=b'='
+    LEG_PAD_BYTE=b'=',
+    PAD_BYTE=b'=',
 )
 
 

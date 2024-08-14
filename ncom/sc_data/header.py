@@ -4,7 +4,7 @@ from .struct import H_ITEM, LegacyHeader, NGHeader, ExtendedHeader
 from .constants import SZ, HDR, FRMT
 from .appinfo import APPINFO
 from .functions import memoize
-from typing import Tuple, List, Dict, Union
+from typing import cast, Tuple, List, Dict, Union
 from datetime import datetime
 
 
@@ -142,7 +142,7 @@ class LegacyHeaderItems:
 
     @staticmethod
     def header_length() -> int:
-        return sum([i.SIZE for i in NGHeaderItems.items()])
+        return sum([i.SIZE for i in LegacyHeaderItems.items()])
 
 
 class _NGHeader:
@@ -166,8 +166,26 @@ class _NGHeader:
 
 class _LegacyHeader:
     @staticmethod
-    def load_from_bytes(__bytes: bytes, __padding: bytes) -> LegacyHeader:
-        raise NotImplemented
+    def load_from_bytes(__bytes: bytes) -> LegacyHeader:
+        __bytes = __bytes.strip()
+        assert len(__bytes) == LegacyHeaderItems.header_length()
+
+        fns = {
+            H_TYPE.INT: int,
+            H_TYPE.STR: lambda b: cast(bytes, b).decode(),
+            H_TYPE.BIT: lambda x: x.upper() in (b'1', b'T')
+        }
+
+        # return Header(*[fns[i.TYPE](__hdr_bytes[i.INDEX:(i.INDEX + i.SIZE):].strip(HEADER_PAD_BYTE)) for i in HeaderItems.items()])
+
+        items = []
+        for i in LegacyHeaderItems.items():
+            items.append(fns[i.TYPE](__bytes[i.INDEX:(i.INDEX + i.SIZE):].strip(HDR.LEG_PAD_BYTE)))
+
+            if i.TYPE in (H_TYPE.STR, H_TYPE.INT) and i.PAD == H_PAD_MODE.NONE:
+                assert len(str(items[-1])) == i.SIZE
+
+        return LegacyHeader(*items)
 
     @staticmethod
     def create_bytes(__header: LegacyHeader) -> bytes:
@@ -255,8 +273,8 @@ class HeaderUtils:
         )
 
     @staticmethod
-    def load_legacy_header(__hdr_bytes: bytes, __padding: bytes) -> LegacyHeader:
-        return _LegacyHeader.load_from_bytes(__hdr_bytes, __padding)
+    def load_legacy_header(__hdr_bytes: bytes) -> LegacyHeader:
+        return _LegacyHeader.load_from_bytes(__hdr_bytes)
 
     @staticmethod
     def create_ng_bytes(

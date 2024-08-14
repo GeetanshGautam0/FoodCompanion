@@ -6,7 +6,7 @@ except ImportError:
     from ..sc_db import *
 
 
-import sys, socket, re, select, rsa, hashlib, traceback
+import sys, socket, re, select, rsa, hashlib, traceback, random
 from time import sleep, strftime, gmtime
 from datetime import datetime
 from threading import Thread, Event, Timer
@@ -56,10 +56,10 @@ class __fc_server__:
         self.__sock__: socket.socket
 
         self.__is_alive__ = True
-        self.__sessions__: Dict[str, Tuple[Tuple[str, rsa.PublicKey, rsa.PrivateKey], Any]] = {}
+        self.__sessions__: Dict[str, Dict[str, Any]] = {}
         self.__connectors__: Dict[str, Tuple[__fc_thread__, socket.socket, Tuple[str, int]]] = {}
         self.__cost_task__: Timer | None = None
-        self.__cost_timer__ = 15
+        self.__cost_timer__ = AppInfo.APPINFO.COST_TIMER
         self.__attr__ = ()
 
         self._on_init()
@@ -97,7 +97,7 @@ class __fc_server__:
 
         # Secondary loop: C-OST
 
-        self.__cost_task__ = Timer(self.__cost_timer__, self._clear_ost)
+        self.__cost_task__ = Timer(self.__cost_timer__, lambda: self.sf_execute(self._clear_ost))
         self.__cost_task__.start()
 
         # Primary loop
@@ -118,7 +118,8 @@ class __fc_server__:
 
             if not _ss:
                 stderr(res.__str__())
-                self._clear_ost()
+                self.sf_execute(self._clear_ost)
+
                 continue  # Go back to the top
 
             (read, *_) = res  # Unpack read, write, and errors
@@ -146,7 +147,10 @@ class __fc_server__:
             return True, fnc(*args, **kwargs)
 
         except Exception as E:
-            stderr(traceback.format_exc(), 'SERVER<%s, %d> @sf_execute' % self.__net__)
+            lines = traceback.format_exc().split('\n')
+            tb = '\n'.join([f' {("%d" % (i + 1)).ljust(len(f"{len(lines) + 1}"))}  | {l}' for i, l in enumerate(lines)])
+
+            stderr(f'Exception ignored:\n{tb}'.strip(), 'SERVER<%s, %d> @sf_execute' % self.__net__)
             return False, E
 
     # -------- Internal Functions --------
@@ -163,30 +167,28 @@ class __fc_server__:
         s.close()
 
     def _clear_ost(self) -> None:
-        for k, (t, s, *_) in self.__connectors__.items():
+        p = 0
+        for k, (t, s, *_) in {**self.__connectors__}.items():  # Copy to avoid runtime errors.
             if t.is_done:
                 try:
                     s.close()
                 except:
                     pass
 
+                p += 1
                 self.__connectors__.pop(k)
 
-        self.__cost_task__ = Timer(self.__cost_timer__, self._clear_ost)
+        if p > 0:
+            stdout(
+                f"R{p} L{len(self.__connectors__)} w{self.__cost_timer__}",
+                "SERVER<%s, %d> @cOST_update" % self.__net__
+            )
+
+        self.__cost_task__ = Timer(self.__cost_timer__, lambda: self.sf_execute(self._clear_ost))
         self.__cost_task__.start()
 
     def _gen_ses_tok(self, __salt: str = '') -> str:
-        i = 0
-        while i < 3:
-            ses_tok = hashlib.md5(f'{__salt}{datetime.now().strftime("%Y%M%D%H%m%S")}'.encode()).hexdigest()
-
-            if ses_tok not in self.__sessions__:
-                return ses_tok
-
-            i += 1
-
-        else:
-            raise Exception("Couldn't create a unique session token (3 attempts).")
+        return hashlib.md5(f'{__salt}{random.random()}{datetime.now().strftime("%Y%M%D%H%m%S")}'.encode()).hexdigest()
 
     def _reply_to_http(self, _rcv: bytes, _conn: socket.socket, _addr: Tuple[str, int]) -> bool:
         def read_file(file: str) -> str:
@@ -217,7 +219,6 @@ class __fc_server__:
         def format_as_p(d: List[str]) -> str:
             return '\n'.join([f'<p>{l}</p>' for l in d])
 
-
         if b'GET' in _rcv and b'HTTP' in _rcv:
             stdout(f"Replying to %s:%d as an HTTP request." % _addr, f'SERVER<%s, %d>' % self.__net__)
 
@@ -229,7 +230,9 @@ class __fc_server__:
             html = read_file('sc_server/_html/help.html')
 
             com_spec = file_content('ng_com_spec')
-            help_html = format_as_p([com_spec])
+            changelog = file_content('com.CHANGELOG')
+            license = file_content('../LICENSE')
+            help_html = format_as_p([com_spec, changelog, license])
 
             tx_time = datetime.now().strftime(f'{Constants.FRMT.DATETIME} UTC{strftime("%z", gmtime())}')
             phdr = f'GeetanshGautam / TX@{tx_time} / FC<{AppInfo.APPINFO.APP_VERSION}>'
@@ -254,6 +257,9 @@ class __fc_server__:
 
             sleep(0.5)
             return True
+
+        else:
+            _conn.send(Constants.RESPONSES.ERRORS.BAD_REQUEST.encode())  # Bad request.
 
         return False
 
@@ -337,7 +343,7 @@ class __fc_server__:
         Expected behaviour:
             * Handle any incoming messages
             * Request more data if needed manually using __fc_server__.recv(N)
-            * If c_name is None, return (None) immediately as this is a test to check if the listener is defined.
+            * If c_name is None, return Literal(PASS) immediately as this is a test to check if the listener is defined.
             * If a session key is provided:
                 A. If the token is valid, add the c_name to __sessions__
                 B. If the token is invalid, return RESPONSES.ERRORS.INVALID_SESSION_ID
