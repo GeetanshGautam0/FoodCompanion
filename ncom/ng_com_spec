@@ -3,6 +3,7 @@ The Basics:
     The original (now "LEGACY SPEC") specification is still accepted however its use is discouraged.
 
     All RSA keys are 512-bit.
+    Share public keys in the PEM format.
 
 The "New Generation" Specification:
     Each transmission (TX) consists of 4 sections:
@@ -182,6 +183,7 @@ Accepted commands (updated 12/AUG/2024):
     Command             Description                             Steps                                               Needs Authentication?
     -------------------------------------------------------------------------------------------------------------------------------------
     "GET-P-RCD"         Get patient record.                     FORM-PTR-1a.                                        -
+    "GET-P-DET"         Get patient diet order.                 FORM-PTR-1a.                                        -
     "GET-P-LST"         Get patient list.                       (1) FORM-PTR-1b. (2) Returns patient list.          **
     "NEW-P-RCD"         Create a new patient record.            FORM-PTR-2.                                         **
     "UPD-P-DET"         Update a patient's diet order.          FORM-PTR-3a.                                        **
@@ -197,38 +199,44 @@ Accepted commands (updated 12/AUG/2024):
     "NEW-F-DET"         Create a new diet order.                FORM-FDR-4.                                         **
     -------------------------------------------------------------------------------------------------------------------------------------
 
+FUD:
+    The form update date (FUD) indicates the date when the form design was last changed.
+    The app can check this date to make sure that it knows how to "fill" the form properly.
+
+    This date is formatted per the DATETIME format and is located at the end of the form, after the ">>" delimiter.
+
 FORM-PTR-1a
-    "PTR-1a<[&pid;].[&iid;].[&dob;]>"
+    "PTR-1a<[&pid;].[&iid;].[&dob;]> >> [FUD]"
 
 FORM-PTR-1b
-    "PTR-1b<[&iid;].[&userID;].[&userAC;]>"
+    "PTR-1b<[&iid;].[&userID;].[&userAC;]> >> [FUD]"
 
 FORM-PTR-2
-    "PTR-2 <[&pid;].[&iid;].[&dob;].[&pname].[&diet]>"
+    "PTR-2 <[&pid;].[&iid;].[&dob;].[&pname].[&diet]> >> [FUD]"
 
 FORM-PTR-3a
-    "PTR-3a<[&pid;].[&iid;].[&dob;].[&diet]>"
+    "PTR-3a<[&pid;].[&iid;].[&dob;].[&diet]> >> [FUD]"
 
 FORM-PTR-3b
-    "PTR-3b<[&pid;].[&iid;].[&dob;].[&field;].[&value;]>"
+    "PTR-3b<[&pid;].[&iid;].[&dob;].[&field;].[&value;]> >> [FUD]"
 
 FORM-PTR-4
-    "PTR-4 <[&pid;].[&iid;].[&dob]>"
+    "PTR-4 <[&pid;].[&iid;].[&dob]> >> [FUD]"
 
 FORM-FDR-1
-    "FDR-1 <[&name;].[&bld;].[&cat;].[&cal;].[&cst;].[&csu;].[&cfi;].[&ftr;].[&fsa;].[&pco;].[&pro;].[&ssc;].[&ssu;].[&odiets;]>"
+    "FDR-1 <[&name;].[&bld;].[&cat;].[&cal;].[&cst;].[&csu;].[&cfi;].[&ftr;].[&fsa;].[&pco;].[&pro;].[&ssc;].[&ssu;].[&odiets;]> >> [FUD]"
 
 FORM-FDR-2
-    "FDR-2 <[&field;].[&value;]>"
+    "FDR-2 <[&field;].[&value;]> >> [FUD]"
 
 FORM-FDR-3a
-    "FDR-3a<[&id;].[&diet;]>"
+    "FDR-3a<[&id;].[&diet;]> >> [FUD]"
 
 FORM-FDR-3b
-    "FDR-3b<[&id;].[&diet;]>"
+    "FDR-3b<[&id;].[&diet;]> >> [FUD]"
 
 FORM-FDR-4
-    "FDR-4 <[&name;]>"
+    "FDR-4 <[&name;]> >> [FUD]"
 
 
 Responses:

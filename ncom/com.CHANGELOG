@@ -1,0 +1,9 @@
+* The New Generation (NG) communication specification added the following features:
+    1. End-to-end encryption support.
+    2. An extended header to allow for the exchange of more information.
+    3. A form system to allow the app to easily send required information to the server.
+    4. A request system to allow NG apps to carry out administrative tasks in addition to accessing patient diet orders.
+    4b. An authentication system to only allow authorized users to access/modify sensitive/administrative information.
+    5. Proper replies for errors.
+* The server still supports the LEGACY communication specification, though its use by NG apps is discouraged.
+* Better handling of HTTP responses, including the sharing of `ng_com_spec` and this document.

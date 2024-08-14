@@ -12,6 +12,7 @@ class AppInfo(Constants):
     SRVC_TCP_DEFAULT_RCV_LEN:   int
     SRVC_TCP_MAX_CONCUR_CONN:   int
     SRVC_TCP_SELECT_TIMEOUT:    int
+    COST_TIMER:                 float
 
     APP_DATA_PATH:              str
 
