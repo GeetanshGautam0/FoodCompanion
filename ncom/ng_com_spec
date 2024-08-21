@@ -172,6 +172,7 @@ Forms:
         Security/Validation Fields (for sensitive data):
             &userID;    User ID                 (int)
             &userAC;    User Access Code        (str)
+            &txTime;    Transmission Time       (int)          * Use the DATETIME format.
 
 Accepted commands (updated 12/AUG/2024):
     * Note that all commands must be encrypted w/ the public key sent by the server.
@@ -182,7 +183,7 @@ Accepted commands (updated 12/AUG/2024):
     -------------------------------------------------------------------------------------------------------------------------------------
     Command             Description                             Steps                                               Needs Authentication?
     -------------------------------------------------------------------------------------------------------------------------------------
-    "GET-P-RCD"         Get patient record.                     FORM-PTR-1a.                                        -
+    "GET-P-RCD"         Get patient record.                     FORM-PTR-1c.                                        **
     "GET-P-DET"         Get patient diet order.                 FORM-PTR-1a.                                        -
     "GET-P-LST"         Get patient list.                       (1) FORM-PTR-1b. (2) Returns patient list.          **
     "NEW-P-RCD"         Create a new patient record.            FORM-PTR-2.                                         **
@@ -190,12 +191,12 @@ Accepted commands (updated 12/AUG/2024):
     "UPD-P-RCD"         Update a patient's record.              FORM-PTR-3b.                                        **
     "DEL-P-RCD"         Delete a patient record.                FORM-PTR-4.                                         **
 
-    "GET-F-LST"         Get a list of food items.               -                                                   -
+    "GET-F-LST"         Get a list of food items.               FORM-FDR-5                                          -
     "NEW-F-RCD"         Create a new food record.               FORM-FDR-1.                                         **
     "UPD-F-RCD"         Update a food record.                   FORM-FDR-2.                                         **
     "NEW-F-OMI"         Add diet order to omitted list.         FORM-FDR-3a.                                        **
     "DEL-F-OMI"         Remove diet order from omitted list.    FORM-FDR-3b.                                        **
-    "GET-F-DET"         Get a list of diet orders.              -                                                   -
+    "GET-F-DET"         Get a list of diet orders.              FORM-FDR-5                                          -
     "NEW-F-DET"         Create a new diet order.                FORM-FDR-4.                                         **
     -------------------------------------------------------------------------------------------------------------------------------------
 
@@ -209,35 +210,40 @@ FORM-PTR-1a
     "PTR-1a<[&pid;].[&iid;].[&dob;]> >> [FUD]"
 
 FORM-PTR-1b
-    "PTR-1b<[&iid;].[&userID;].[&userAC;]> >> [FUD]"
+    "PTR-1b<[&iid;].[&userID;].[&userAC;].[&txTime;]> >> [FUD]"
+
+FORM-PTR-1c
+    "PTR-1a<[&pid;].[&iid;].[&dob;].[&userID;].[&userAC;].[&txTime;]> >> [FUD]"
 
 FORM-PTR-2
-    "PTR-2 <[&pid;].[&iid;].[&dob;].[&pname].[&diet]> >> [FUD]"
+    "PTR-2 <[&pid;].[&iid;].[&dob;].[&pname].[&diet].[&userID;].[&userAC;].[&txTime;]> >> [FUD]"
 
 FORM-PTR-3a
-    "PTR-3a<[&pid;].[&iid;].[&dob;].[&diet]> >> [FUD]"
+    "PTR-3a<[&pid;].[&iid;].[&dob;].[&diet].[&userID;].[&userAC;].[&txTime;]> >> [FUD]"
 
 FORM-PTR-3b
-    "PTR-3b<[&pid;].[&iid;].[&dob;].[&field;].[&value;]> >> [FUD]"
+    "PTR-3b<[&pid;].[&iid;].[&dob;].[&field;].[&value;].[&userID;].[&userAC;].[&txTime;]> >> [FUD]"
 
 FORM-PTR-4
-    "PTR-4 <[&pid;].[&iid;].[&dob]> >> [FUD]"
+    "PTR-4 <[&pid;].[&iid;].[&dob].[&userID;].[&userAC;].[&txTime;]> >> [FUD]"
 
 FORM-FDR-1
-    "FDR-1 <[&name;].[&bld;].[&cat;].[&cal;].[&cst;].[&csu;].[&cfi;].[&ftr;].[&fsa;].[&pco;].[&pro;].[&ssc;].[&ssu;].[&odiets;]> >> [FUD]"
+    "FDR-1 <[&name;].[&bld;].[&cat;].[&cal;].[&cst;].[&csu;].[&cfi;].[&ftr;].[&fsa;].[&pco;].[&pro;].[&ssc;].[&ssu;].[&odiets;].[&iid;].[&userID;].[&userAC;].[&txTime;]> >> [FUD]"
 
 FORM-FDR-2
-    "FDR-2 <[&field;].[&value;]> >> [FUD]"
+    "FDR-2 <[&field;].[&value;].[&iid;].[&userID;].[&userAC;].[&txTime;]> >> [FUD]"
 
 FORM-FDR-3a
-    "FDR-3a<[&id;].[&diet;]> >> [FUD]"
+    "FDR-3a<[&id;].[&diet;].[&iid;].[&userID;].[&userAC;].[&txTime;]> >> [FUD]"
 
 FORM-FDR-3b
-    "FDR-3b<[&id;].[&diet;]> >> [FUD]"
+    "FDR-3b<[&id;].[&diet;].[&iid;].[&userID;].[&userAC;].[&txTime;]> >> [FUD]"
 
 FORM-FDR-4
-    "FDR-4 <[&name;]> >> [FUD]"
+    "FDR-4 <[&name;].[&iid;].[&userID;].[&userAC;].[&txTime;]> >> [FUD]"
 
+FORM-FDR-5
+    "FDR-5 <[&iid;]> >> [FUD]"
 
 Responses:
 

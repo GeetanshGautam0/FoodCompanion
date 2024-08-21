@@ -273,8 +273,30 @@ class InstitutionID(str):
         self.__value__ = iid
         str.__init__(iid)
 
+        self._on_init()
+
+    def _on_init(self) -> None:
+        self.__value__ = self.__value__.strip()
+        assert len(self.__value__), 'No IID provided.'
+
     @property
     def value(self) -> str:
+        return self.__value__
+
+    def __repr__(self) -> str:
+        return f'{self.__class__.__name__}("{self.value}")'
+
+    def __str__(self) -> str:
+        return self.__value__
+
+
+class PatientID(int):
+    def __init__(self, pid) -> None:
+        self.__value__ = int(pid)
+        int.__init__(pid)
+
+    @property
+    def value(self) -> int:
         return self.__value__
 
     def __repr__(self) -> str:
@@ -284,10 +306,10 @@ class InstitutionID(str):
         return self.__repr__()
 
 
-class PatientID(int):
-    def __init__(self, dob) -> None:
-        self.__value__ = int(dob)
-        int.__init__(dob)
+class UserID(int):
+    def __init__(self, uid: int) -> None:
+        self.__value__ = int(uid)
+        int.__init__(uid)
 
     @property
     def value(self) -> int:
@@ -353,9 +375,15 @@ class FormattedName(str):
 
             self.__value__ = ' '.join([f'{last.upper()},', *[t.title() for t in tokens]])
 
+        else:
+            self.__value__ = v
+
     @property
     def value(self):
         return self.__value__
+
+    def __repr__(self) -> str:
+        return f'{self.__class__.__name__}("{self.value}")'
 
     def __str__(self) -> str:
         return self.value
@@ -368,4 +396,17 @@ class PT:
     DOB:            FormattedDate
     DIET:           DietOrder
     name:           FormattedName
+
+
+@dataclass
+class UserRecord:
+    IID:            InstitutionID
+    UID:            UserID
+    ACCESS:         List[int]
+    PSW_HASH:       str
+    name:           FormattedName
+
+
+UserRecord_AccessDelim = "|"
+
 
