@@ -208,16 +208,85 @@ class _NGHeader:
 
     @staticmethod
     def load_exh_from_bytes(__bytes: bytes) -> ExtendedHeader:
-        raise NotImplemented
+        exh_delim = b'<EXH_DELIM>'
+        exh_null = b'<EXH_NO_DATA>'
+
+        return ExtendedHeader(*[
+            d.decode() if d != exh_null else None
+            for d in __bytes.split(exh_delim)
+        ])
 
     @staticmethod
     def create_bytes(__ngh: NGHeader, __exh: ExtendedHeader, __hash: str) -> Tuple[bytes, bytes]:
         # Returns header, hash
-        exh_delim = '<EXH_DELIM>'
-        exh_null = '<EXH_NO_DATA>'
+        exh_bytes = __exh.to_bytes()
+        __ngh.EXT_HDR_L = len(exh_bytes)
 
-        # TODO: create EXH bytes, compute length, and finally use that as opposed to __ngh.EXT_HDR_L.
-        raise NotImplemented
+        _hdr_data = {
+            # NOTE: The order in which the following items are listed is the order they will be in
+            #       in the final header.
+
+            'MSGINTENT': (__ngh.MSGINTENT, NGHeaderItems.MSGINTENT),
+            'H_APP_VIS': (__ngh.H_APP_VIS, NGHeaderItems.H_APP_VIS),
+            'H_COM_CHK': (__ngh.H_COM_CHK, NGHeaderItems.H_COM_CHK),
+            'H_HDR_VER': (__ngh.H_HDR_VER, NGHeaderItems.H_HDR_VER),
+            'H_MC_TYPE': (__ngh.H_MC_TYPE, NGHeaderItems.H_MC_TYPE),
+            'H_SES_TOK': (__ngh.H_SES_TOK, NGHeaderItems.H_SES_TOK),
+            'H_TX_TIME': (__ngh.H_TX_TIME, NGHeaderItems.H_TX_TIME),
+            'H_CLT_UID': (__ngh.H_CLT_UID, NGHeaderItems.H_CLT_UID),
+            'H_MSG_LEN': (__ngh.H_MSG_LEN, NGHeaderItems.H_MSG_LEN),
+            'H_HSH_LEN': (__ngh.H_HSH_LEN, NGHeaderItems.H_HSH_LEN),
+            'EXT_HDR_L': (__ngh.EXT_HDR_L, NGHeaderItems.EXT_HDR_L),
+        }
+
+        assert len(_hdr_data) == len(NGHeaderItems.items()), \
+            'Function ncom.sc_data.header._NGHeader.create_bytes not up to date.'
+
+        def _ass(__data: Union[int, bool, str, bytes], __item: H_ITEM) -> bytes:
+            padding = HDR.PAD_BYTE
+
+            dout: bytes
+            draw: bytes
+
+            match __item.TYPE:
+                case H_TYPE.INT:
+                    assert isinstance(__data, int)
+                    draw = str(__data).encode()
+
+                case H_TYPE.STR:
+                    assert isinstance(__data, (str, bytes))
+                    if isinstance(__data, str):
+                        draw = __data.encode()
+                    else:
+                        draw = __data
+
+                case H_TYPE.BIT:
+                    assert isinstance(__data, (bool, int))
+                    draw = b'1' if __data else b'0'
+
+                case H_TYPE.CHAR:
+                    assert isinstance(__data, (int, str))
+                    draw = str(__data).encode()
+                    assert len(draw) == 1
+
+                case H_TYPE.HEX_STRING:
+                    assert isinstance(__data, int)
+                    draw = hex(__data).upper()[2::].encode()
+
+                case _:
+                    raise TypeError("Unexpected H_TYPE.")
+
+            if __item.PAD == H_PAD_MODE.NONE:
+                assert len(draw) == __item.SIZE
+                dout = draw
+
+            else:
+                assert len(draw) <= __item.SIZE
+                dout = HeaderUtils.pad(draw, __item.SIZE, padding, __item.PAD)
+
+            return dout
+
+        return b''.join([_ass(hd, hi) for (hd, hi) in _hdr_data.values()]), exh_bytes
 
 
 class _LegacyHeader:
@@ -257,7 +326,7 @@ class _LegacyHeader:
         }
 
         assert len(_hdr_data) == len(LegacyHeaderItems.items()), \
-            'Function ncom.sc_data.header.create_bytes not up to date.'
+            'Function ncom.sc_data.header._LegacyHeader.create_bytes not up to date.'
 
         def _ass(__data: Union[int, bool, str, bytes], __item: H_ITEM) -> bytes:
             padding = HDR.PAD_BYTE
@@ -337,13 +406,13 @@ class HeaderUtils:
             __intent: str,
             __tx_is_server: bool,
             __message: bytes | str,
-            __session_token: str,
-            __client_uid: str,
+            __session_token: str | None,
+            __client_uid: str | None,
             __public_key: bytes | None,
     ) -> Tuple[bytes, bytes]:  # Returns NGHeader+EXH, TX_CHK
         assert __intent in ('C', 'S')
 
-        mc_type = str(int(not __tx_is_server))  # 1: Client, 0: Server
+        mc_type = 0 if __tx_is_server else 1  # 1: Client, 0: Server
         hdr_ver = 1
         hash_s = hashlib.sha256(__message.encode() if isinstance(__message, str) else __message).hexdigest()
         time = int(datetime.now().strftime(FRMT.DATETIME))
@@ -351,9 +420,12 @@ class HeaderUtils:
         extended_header = ExtendedHeader(
             EXH_PLATFORM=platform.platform(),
             EXH_MACHINE=platform.machine(),
-            EXH_MAC_ADDR=hashlib.md5(uuid.getnode()).hexdigest(),
+            EXH_MAC_ADDR=hashlib.md5(f'{uuid.getnode()}'.encode()).hexdigest(),
             EXH_KEY_MD5=(None if __public_key is None else hashlib.md5(__public_key).hexdigest())
         )
+
+        __session_token = ('0' * NGHeaderItems.H_SES_TOK.SIZE) if __session_token is None else __session_token
+        __client_uid = ('0' * NGHeaderItems.H_CLT_UID.SIZE) if __client_uid is None else __client_uid
 
         ng_header = NGHeader(
             MSGINTENT=__intent,
@@ -366,7 +438,7 @@ class HeaderUtils:
             H_CLT_UID=__client_uid,
             H_MSG_LEN=len(__message),
             H_HSH_LEN=len(hash_s),
-            EXT_HDR_L=-1
+            EXT_HDR_L=0
         )
 
         return _NGHeader.create_bytes(ng_header, extended_header, hash_s)

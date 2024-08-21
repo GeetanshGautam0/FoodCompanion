@@ -33,7 +33,7 @@ class NGHeader:
     H_APP_VIS: int  # 14-char
     H_COM_CHK: str  # 32-char
     H_HDR_VER: int  # -> Hex Str    3-char
-    H_MC_TYPE: str  # 1-char        '0' or '1'
+    H_MC_TYPE: int  # 1-char        0 or 1
     H_SES_TOK: str  # 32-char
     H_TX_TIME: int  # 14-char
     H_CLT_UID: str  # 34-char
@@ -48,6 +48,23 @@ class ExtendedHeader:           # Only used by clients.
     EXH_MACHINE:  str           # platform.machine()
     EXH_MAC_ADDR: str           # hashlib.md5(uuid.getnode()).hexdigest()
     EXH_KEY_MD5:  str | None    # public key MD5 hash.
+
+    def _get_items(self) -> List[str | None]:
+        return [
+            self.EXH_PLATFORM,
+            self.EXH_MACHINE,
+            self.EXH_MAC_ADDR,
+            self.EXH_MACHINE
+        ]
+
+    def to_bytes(self) -> bytes:
+        exh_delim = b'<EXH_DELIM>'
+        exh_null = b'<EXH_NO_DATA>'
+
+        return exh_delim.join([
+            s.encode() if s is not None else exh_null
+            for s in self._get_items()
+        ]).strip(exh_delim)
 
 
 @dataclass
