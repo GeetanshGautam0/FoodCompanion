@@ -8,8 +8,10 @@ class H_TYPE(Enum):
     (
         BIT,
         INT,
-        STR
-    ) = range(3)
+        STR,
+        CHAR,
+        HEX_STRING
+    ) = range(5)
 
 
 class H_PAD_MODE(Enum):

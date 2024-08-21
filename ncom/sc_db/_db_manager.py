@@ -510,6 +510,7 @@ class SQLDatabase(__database__):
 @dataclass
 class __tbl_desc(Constants.Constants):
     pt_table:   Structs.SQLTableDescriptor
+    user_table: Structs.SQLTableDescriptor
 
 
 TABLE_DESCRIPTORS = __tbl_desc(
@@ -523,8 +524,213 @@ TABLE_DESCRIPTORS = __tbl_desc(
             Structs.SQLColumn('iid',    Enums.SQLType.TEXT, [Enums.SQLFlags.NOT_NULL]),
             Structs.SQLColumn('dob',    Enums.SQLType.INTEGER, [Enums.SQLFlags.NOT_NULL]),
         ]
+    ),
+    user_table=Structs.SQLTableDescriptor(
+        "USER",
+        [
+            Structs.SQLColumn('n', Enums.SQLType.INTEGER, [Enums.SQLFlags.PRIMARY_KEY, Enums.SQLFlags.AUTOINCREMENT]),
+            Structs.SQLColumn('uid', Enums.SQLType.INTEGER, [Enums.SQLFlags.NOT_NULL]),
+            Structs.SQLColumn('iid', Enums.SQLType.TEXT, [Enums.SQLFlags.NOT_NULL]),
+            Structs.SQLColumn('name', Enums.SQLType.TEXT, [Enums.SQLFlags.NOT_NULL]),
+            Structs.SQLColumn('access', Enums.SQLType.TEXT, [Enums.SQLFlags.NOT_NULL]),  # List of integers;delim w/ "|"    Determines what the user has access to.
+            Structs.SQLColumn('psw', Enums.SQLType.TEXT, [Enums.SQLFlags.NOT_NULL]),     # Save psw hash, not plaintext.
+        ]
     )
 )
+
+
+class UserDatabase(SQLDatabase):
+    def __init__(self) -> None:
+        self.__file_name__ = "db/users.db"
+        super().__init__(self.__file_name__, TABLE_DESCRIPTORS.user_table)
+
+    def _uid_in_db(self, uid: int, iid: str) -> bool:
+        return len(self.read(SQLReadMode.FETCH_ALL, uid=uid, iid=iid)[-1][-1]) > 0
+
+    def validate_credentials(self, uid: int, iid: str, psw: str) -> bool:
+        # True: valid user
+        # False: invalid user
+
+        if not self._uid_in_db(uid, iid):
+            return False
+
+        s, r = self._execute_(self.get_user_record, False, uid, iid, psw)
+
+        return s & isinstance(r, Structs.UserRecord)
+
+    def get_user_record(
+            self,
+            uid: int,
+            iid: str,
+            psw: str
+    ) -> Structs.UserRecord | None:
+        if not self._uid_in_db(uid, iid):
+            return None
+
+        res = self.read(
+            SQLReadMode.FETCH_ALL,
+            uid=uid,
+            iid=iid,
+            psw=psw
+        ) #[-1][-1]
+
+        if isinstance(res, tuple):
+            res = res[-1]
+        else:
+            return None
+
+        if isinstance(res, tuple):
+            res = res[-1]
+        else:
+            return None
+
+        if not len(res):
+            return None
+
+        user, *_ = res
+        ca_map = {
+            'UID': (1, Structs.UserID),
+            'IID': (2, Structs.InstitutionID),
+            'name': (3, Structs.FormattedName),
+            'ACCESS': (4, lambda s: [int(a) for a in s.split(Structs.UserRecord_AccessDelim)]),
+            'PSW_HASH': (5, str),
+        }
+
+        return Structs.UserRecord(**{k: t(user[i]) for k, (i, t) in ca_map.items()})
+
+    def create_new_user(self, user: Structs.UserRecord) -> bool:
+        if self._uid_in_db(user.UID.value, user.IID.value):
+            stderr("UID exists at IID", " @ _create_new_user")
+            return False
+
+        if not len(user.name):
+            stderr("Invalid user name.", " @ _create_new_user")
+            return False
+
+        data = {
+            'n': None,
+            'uid': user.UID.value,
+            'iid': user.IID.value,
+            'name': user.name.value,
+            'access': Structs.UserRecord_AccessDelim.join([str(a) for a in user.ACCESS]).strip(Structs.UserRecord_AccessDelim),
+            'psw': user.PSW_HASH
+        }
+
+        return self.write(SQLWriteMode.ADD, **data)[0]
+
+    def delete_user(self, user: Structs.UserRecord) -> bool:
+        if not self._uid_in_db(user.UID.value, user.IID.value):
+            stderr("UID does not exist at IID", " @ _delete_user")
+            return False
+
+        return self._sql_command_(
+            "DELETE FROM %s WHERE uid=%d AND iid=\"%s\" AND psw=%s" % (
+                self.__desc__.table_name,
+                user.UID.value,
+                user.IID.value,
+                user.PSW_HASH,
+            )
+        )[0]
+
+    def get_user_list(self) -> List[Structs.UserRecord]:
+        o = []
+
+        s, v = self.read(SQLReadMode.FETCH_ALL)
+        if s and isinstance(v, (tuple, list)):
+            s, apl = v
+
+            if s and isinstance(apl, (tuple, list)):
+                ca_map = {
+                    'UID': (1, Structs.UserID),
+                    'IID': (2, Structs.InstitutionID),
+                    'name': (3, Structs.FormattedName),
+                    'ACCESS': (4, lambda s: [int(a) for a in s.split(Structs.UserRecord_AccessDelim)]),
+                    'PSW_HASH': (5, str),
+                }
+
+                for pt in apl:
+                    s, user = self._execute_(Structs.UserRecord, False, **{k: t(pt[i]) for k, (i, t) in ca_map.items()})
+                    if s:
+                        o.append(user)
+                    else:
+                        stderr(f'Failed to parse user: {user}', ' @ _get_user_list')  # user: exception
+
+        return o
+
+    def update_user_data(
+        self,
+        user: Structs.UserRecord,
+        column: str,
+        new_data: Any
+    ) -> bool:
+        global TABLE_DESCRIPTORS
+
+        if not self.validate_credentials(
+            user.UID.value,
+            user.IID.value,
+            user.PSW_HASH
+        ):
+            return False
+
+        conv = lambda s: [int(a) for a in s.split(Structs.UserRecord_AccessDelim)]
+
+        ca_map = {
+            'UID': (1, (int, Structs.UserID), True),
+            'IID': (2, (str, Structs.InstitutionID), True),
+            'NAME': (3, (str, Structs.FormattedName), True),
+            'ACCESS': (4, (str, list), False),
+            'PSW_HASH': (5, (str, ), False),
+        }
+
+        assert column.upper() in ca_map.keys(), column
+        i, t, nv = ca_map[column.upper()]
+        c = TABLE_DESCRIPTORS.user_table.columns[i]
+
+        if not isinstance(new_data, t[-1]):
+            assert isinstance(new_data, t)  # Make sure it's one of the accepted types
+            f = t[-1] if t[-1] is not list else conv  # Conversion function
+
+            new_data = f(new_data)
+
+        if nv:
+            v = new_data.value
+        else:
+            v = new_data
+
+        return self.write(
+            SQLWriteMode.UPDATE,
+            c, v,
+            pid=user.UID.value,
+            iid=user.IID.value,
+            psw=user.PSW_HASH,
+        )[0]
+
+    def remove_access(self, user: Structs.UserRecord, access_level: int) -> Tuple[bool, Structs.UserRecord]:
+        if access_level not in user.ACCESS:
+            return False, user
+
+        old = user.ACCESS
+
+        assert user.ACCESS.pop(user.ACCESS.index(access_level)) == access_level
+        updated = self.update_user_data(user, 'access', user.ACCESS)
+
+        if not updated:
+            user.ACCESS = old
+
+        return updated, user
+
+    def add_access(self, user: Structs.UserRecord, access_level: int) -> Tuple[bool, Structs.UserRecord]:
+        if access_level in user.ACCESS:
+            return False, user
+
+        old = user.ACCESS
+        user.ACCESS.append(access_level)
+        updated = self.update_user_data(user, 'access', user.ACCESS)
+
+        if not updated:
+            user.ACCESS = old
+
+        return updated, user
 
 
 class PTDatabase(SQLDatabase):
@@ -542,6 +748,9 @@ class PTDatabase(SQLDatabase):
         date_of_birth: Structs.FormattedDate,
     ) -> Structs.PT | None:
         # If the ID does not exist at the facility then return immediately.
+        if not self._pid_in_db(patient_id, facility_id):
+            return None
+
         res = self.read(
             SQLReadMode.FETCH_ALL,
             pid=patient_id.value,
@@ -565,7 +774,7 @@ class PTDatabase(SQLDatabase):
         pt, *_ = res
         ca_map = {
             'PID':  (1, Structs.PatientID),
-            'name': (2, str),
+            'name': (2, Structs.FormattedName),
             'DIET': (3, lambda x: Structs.DietOrder(x, get_diet_name(x))),
             'IID':  (4, Structs.InstitutionID),
             'DOB':  (5, Structs.FormattedDate)
@@ -624,7 +833,12 @@ class PTDatabase(SQLDatabase):
                 }
 
                 for pt in apl:
-                    o.append(Structs.PT(**{k: t(pt[i]) for k, (i, t) in ca_map.items()}))
+                    s, pt = self._execute_(Structs.PT, False, **{k: t(pt[i]) for k, (i, t) in ca_map.items()})
+                    if s:
+                        o.append(pt)
+
+                    else:
+                        stderr(f'Failed to parse PTr: {pt}', ' @ _get_user_list')  # pt: exception
 
         return o
 

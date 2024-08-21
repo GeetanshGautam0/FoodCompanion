@@ -8,11 +8,14 @@ from typing import cast, Tuple, List, Dict, Union
 from datetime import datetime
 
 
+NG_COMP_HDR_VER = (1, )  # Only version one headers are compliant.
+
+
 class NGHeaderItems:
     # Message Intent
     #   C: Continue a session
     #   S: Create a new session
-    MSGINTENT = H_ITEM('MSGINTENT', H_TYPE.STR, 1, 0, H_PAD_MODE.NONE)
+    MSGINTENT = H_ITEM('MSGINTENT', H_TYPE.CHAR, 1, 0, H_PAD_MODE.NONE)
 
     # App Version Info String
     #   14-character, base-10 app version (date + time of app compilation)
@@ -24,7 +27,7 @@ class NGHeaderItems:
 
     # Header Version
     #   3-character, hexadecimal (base-16) header version
-    H_HDR_VER = H_ITEM('H_HDR_VER', H_TYPE.STR, 3, (H_COM_CHK.INDEX + H_COM_CHK.SIZE), H_PAD_MODE.PREPEND)
+    H_HDR_VER = H_ITEM('H_HDR_VER', H_TYPE.HEX_STRING, 3, (H_COM_CHK.INDEX + H_COM_CHK.SIZE), H_PAD_MODE.PREPEND)
 
     # Machine Type
     #   1: Client
@@ -47,17 +50,17 @@ class NGHeaderItems:
     # Message Length
     #   Length of message transmitted.
     #   Hexadecimal (base-16)
-    H_MSG_LEN = H_ITEM('H_MSG_LEN', H_TYPE.STR, SZ.MSG_LEN_DESCRIPTOR, (H_CLT_UID.INDEX + H_CLT_UID.SIZE), H_PAD_MODE.PREPEND)
+    H_MSG_LEN = H_ITEM('H_MSG_LEN', H_TYPE.HEX_STRING, SZ.MSG_LEN_DESCRIPTOR, (H_CLT_UID.INDEX + H_CLT_UID.SIZE), H_PAD_MODE.PREPEND)
 
     # Message Hash Length
     #   Length of message hash appended after the extended header.
     #   Hexadecimal (base-16)
-    H_HSH_LEN = H_ITEM('H_HSH_LEN', H_TYPE.STR, SZ.MSG_LEN_DESCRIPTOR, (H_MSG_LEN.INDEX + H_MSG_LEN.SIZE), H_PAD_MODE.PREPEND)
+    H_HSH_LEN = H_ITEM('H_HSH_LEN', H_TYPE.HEX_STRING, SZ.MSG_LEN_DESCRIPTOR, (H_MSG_LEN.INDEX + H_MSG_LEN.SIZE), H_PAD_MODE.PREPEND)
 
     # Extended header length
     #   Length of the extended header
     #   Hexadecimal (base-16)
-    EXT_HDR_L = H_ITEM('EXT_HDR_L', H_TYPE.STR, 3, (H_HSH_LEN.INDEX + H_HSH_LEN.SIZE), H_PAD_MODE.PREPEND)
+    EXT_HDR_L = H_ITEM('EXT_HDR_L', H_TYPE.HEX_STRING, 3, (H_HSH_LEN.INDEX + H_HSH_LEN.SIZE), H_PAD_MODE.PREPEND)
 
     @staticmethod
     def items() -> List[H_ITEM]:
@@ -148,7 +151,60 @@ class LegacyHeaderItems:
 class _NGHeader:
     @staticmethod
     def load_from_bytes(__bytes: bytes) -> NGHeader:
-        raise NotImplemented
+        global NG_COMP_HDR_VER
+
+        def _from_char(c: bytes) -> str:
+            c = c.decode().strip()
+            assert len(c) == 1
+            assert c.isalpha()
+
+            return c
+
+        def _from_hex_str(c: bytes) -> int:
+            c = c.decode().strip()
+            if not len(c):
+                return 0
+
+            return int(c, 16)
+
+        __bytes = __bytes.strip()
+        assert len(__bytes) == NGHeaderItems.header_length()
+
+        fns = {
+            H_TYPE.INT: int,
+            H_TYPE.STR: lambda b: cast(bytes, b).decode(),
+            H_TYPE.BIT: lambda x: x.upper() in (b'1', b'T'),
+            H_TYPE.CHAR: _from_char,
+            H_TYPE.HEX_STRING: _from_hex_str,
+        }
+
+        items = []
+        for i in NGHeaderItems.items():
+            items.append(fns[i.TYPE](__bytes[i.INDEX:(i.INDEX + i.SIZE):].strip(HDR.PAD_BYTE)))
+
+            if i.TYPE in (H_TYPE.STR, H_TYPE.CHAR) and i.PAD == H_PAD_MODE.NONE:
+                assert len(items[-1]) == i.SIZE, f'{i.NAME} <E{i.SIZE}; G{len(str(items[-1]))}>'
+
+            elif i.TYPE in (H_TYPE.INT, H_TYPE.HEX_STRING):
+                match i.TYPE:
+                    case H_TYPE.HEX_STRING:
+                        base = 16
+
+                    case H_TYPE.INT:
+                        base = 10
+
+                    case _:
+                        raise Exception("Unknown Base")
+
+                i_max = (base ** i.SIZE) - 1
+                assert 0 <= items[-1] <= i_max, f'{i.NAME} w/ {i_max=}'
+
+        hdr = NGHeader(*items)
+        hdr.MSGINTENT = hdr.MSGINTENT.upper()
+
+        assert hdr.MSGINTENT in ('C', 'S'), hdr.MSGINTENT
+        assert hdr.H_HDR_VER in NG_COMP_HDR_VER
+        return hdr
 
     @staticmethod
     def load_exh_from_bytes(__bytes: bytes) -> ExtendedHeader:

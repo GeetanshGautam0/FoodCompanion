@@ -142,15 +142,36 @@ class __fc_server__:
         else:
             stdout('Closing server', f'SERVER<%s, %d> @_mainloop' % self.__net__)
 
+    def echo_traceback(self) -> None:
+        lines = traceback.format_exc().split('\n')
+        tb = '\n'.join([f' {("%d" % (i + 1)).ljust(len(f"{len(lines) + 1}"))}  | {l}' for i, l in enumerate(lines)])
+
+        stderr(f'Exception ignored:\n{tb}'.strip(), 'SERVER<%s, %d> @sf_execute' % self.__net__)
+
     def sf_execute(self, fnc, *args, **kwargs) -> Tuple[bool, Any]:
+        """
+        Runs `fnc` and captures any errors.
+
+        Note: any KWARGS prepended w/ sfe_ will be treated as arguments for sf_execute
+
+        :param fnc:    Function to execute.
+        :param args:   args (for fnc)
+        :param kwargs: keyword args (for sf_execute and fnc)
+
+        :keyword sfe_echo_tb: [Def: TRUE; Type: BOOL]   Choose whether the traceback information is formatted and printed to stderr on error.
+        :return: Tuple[bool, Any]                       (Success?, Returned value / Error)
+        """
+
+        kw_self = {k: v for k, v in kwargs.items() if k.startswith('sfe_')}
+        kwargs = {k: v for k, v in kwargs.items() if k not in kw_self}
+
         try:
             return True, fnc(*args, **kwargs)
 
         except Exception as E:
-            lines = traceback.format_exc().split('\n')
-            tb = '\n'.join([f' {("%d" % (i + 1)).ljust(len(f"{len(lines) + 1}"))}  | {l}' for i, l in enumerate(lines)])
+            if kw_self.get('sfe_echo_tb', True):
+                self.echo_traceback()
 
-            stderr(f'Exception ignored:\n{tb}'.strip(), 'SERVER<%s, %d> @sf_execute' % self.__net__)
             return False, E
 
     # -------- Internal Functions --------
@@ -235,7 +256,7 @@ class __fc_server__:
             help_html = format_as_p([com_spec, changelog, license])
 
             tx_time = datetime.now().strftime(f'{Constants.FRMT.DATETIME} UTC{strftime("%z", gmtime())}')
-            phdr = f'GeetanshGautam / TX@{tx_time} / FC<{AppInfo.APPINFO.APP_VERSION}>'
+            phdr = f'GeetanshGautam / TX@{tx_time} / FC<{AppInfo.APPINFO.APP_VERSION}>\n{Header.HeaderUtils.get_com_chk()}'
 
             html = html % (css, phdr, self.__net__[1], help_html)
 
@@ -365,4 +386,5 @@ class __fc_server__:
         if oce is None:
             return None
 
-        return oce(c_name)
+        # return oce(c_name)
+        return self.sf_execute(oce, c_name)[-1]

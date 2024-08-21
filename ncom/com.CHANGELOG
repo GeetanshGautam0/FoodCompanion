@@ -7,3 +7,13 @@
     5. Proper replies for errors.
 * The server still supports the LEGACY communication specification, though its use by NG apps is discouraged.
 * Better handling of HTTP responses, including the sharing of `ng_com_spec` and this document.
+
+08/20/2024
+* Added a UserDatabase.
+* Added userID and userAC fields to all secure forms
+* Added txTime field to secure forms
+* Made meals IID-specific (Added SPEC for form FDR-5)
+
+TODO:
+* Add a system to check that repeat commands are not issued w/ the same TX time (to make sure that transmissions cannot be cloned)
+* Add a CLI for modifying user records.
