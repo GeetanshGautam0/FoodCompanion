@@ -13,11 +13,11 @@ from time import sleep
 
 
 def stdout(data: str, __pr: str = '') -> int:
-    return sys.stdout.write(f'[{__name__}{" " if len(__pr) else ""}{__pr}] {data}\n')
+    return Functions.STDOUT(data, __pr)
 
 
 def stderr(data: str, __pr: str = '') -> int:
-    return sys.stderr.write(f'[{__name__}{" " if len(__pr) else ""}{__pr}] {data}\n')
+    return Functions.STDERR(data, __pr)
 
 
 class LegacyServer(__fc_server__):
@@ -30,6 +30,9 @@ class LegacyServer(__fc_server__):
 
         # __connectors__:   Dict[str, Tuple[__fc_thread__, socket.socket, Tuple[str, int]]]
         # __sessions__:     Dict[str, Dict[str, Any]]
+
+        # Memoize the COM_CHK value for a faster response to the first message.
+        _ = Header.HeaderUtils.get_com_chk()
 
     def run(self) -> None:
         self.bind()

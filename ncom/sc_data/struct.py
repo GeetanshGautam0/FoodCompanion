@@ -54,7 +54,7 @@ class ExtendedHeader:           # Only used by clients.
             self.EXH_PLATFORM,
             self.EXH_MACHINE,
             self.EXH_MAC_ADDR,
-            self.EXH_MACHINE
+            self.EXH_KEY_MD5
         ]
 
     def to_bytes(self) -> bytes:
@@ -64,7 +64,7 @@ class ExtendedHeader:           # Only used by clients.
         return exh_delim.join([
             s.encode() if s is not None else exh_null
             for s in self._get_items()
-        ]).strip(exh_delim)
+        ])
 
 
 @dataclass

@@ -14,11 +14,11 @@ from typing import cast, Tuple, Dict, Any, List, LiteralString
 
 
 def stdout(data: str, __pr: str = '') -> int:
-    return sys.stdout.write(f'[{__name__}{" " if len(__pr) else ""}{__pr}] {data}\n')
+    return Functions.STDOUT(data, __pr)
 
 
 def stderr(data: str, __pr: str = '') -> int:
-    return sys.stderr.write(f'[{__name__}{" " if len(__pr) else ""}{__pr}] {data}\n')
+    return Functions.STDERR(data, __pr)
 
 
 class __fc_thread__(Thread):

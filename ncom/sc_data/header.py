@@ -1,4 +1,5 @@
-import hashlib, platform, uuid
+import hashlib, platform, uuid, rsa
+
 from .enum import H_TYPE, H_PAD_MODE
 from .struct import H_ITEM, LegacyHeader, NGHeader, ExtendedHeader
 from .constants import SZ, HDR, FRMT
@@ -45,7 +46,7 @@ class NGHeaderItems:
 
     # Client UID
     #   Client UID sent by server (to verify session).
-    H_CLT_UID = H_ITEM('H_CLT_UID', H_TYPE.STR, 34, (H_TX_TIME.INDEX + H_TX_TIME.SIZE), H_PAD_MODE.NONE)
+    H_CLT_UID = H_ITEM('H_CLT_UID', H_TYPE.STR, 36, (H_TX_TIME.INDEX + H_TX_TIME.SIZE), H_PAD_MODE.NONE)
 
     # Message Length
     #   Length of message transmitted.
@@ -217,11 +218,8 @@ class _NGHeader:
         ])
 
     @staticmethod
-    def create_bytes(__ngh: NGHeader, __exh: ExtendedHeader, __hash: str) -> Tuple[bytes, bytes]:
+    def create_bytes(__ngh: NGHeader, __hash: str) -> bytes:
         # Returns header, hash
-        exh_bytes = __exh.to_bytes()
-        __ngh.EXT_HDR_L = len(exh_bytes)
-
         _hdr_data = {
             # NOTE: The order in which the following items are listed is the order they will be in
             #       in the final header.
@@ -277,7 +275,7 @@ class _NGHeader:
                     raise TypeError("Unexpected H_TYPE.")
 
             if __item.PAD == H_PAD_MODE.NONE:
-                assert len(draw) == __item.SIZE
+                assert len(draw) == __item.SIZE, f"{len(draw)} != {__item}"
                 dout = draw
 
             else:
@@ -286,7 +284,7 @@ class _NGHeader:
 
             return dout
 
-        return b''.join([_ass(hd, hi) for (hd, hi) in _hdr_data.values()]), exh_bytes
+        return b''.join([_ass(hd, hi) for (hd, hi) in _hdr_data.values()])
 
 
 class _LegacyHeader:
@@ -409,20 +407,32 @@ class HeaderUtils:
             __session_token: str | None,
             __client_uid: str | None,
             __public_key: bytes | None,
-    ) -> Tuple[bytes, bytes]:  # Returns NGHeader+EXH, TX_CHK
+            **kwargs
+    ) -> Tuple[bytes, bytes, str]:  # Returns NGHeader, EXH, TX_CHK
         assert __intent in ('C', 'S')
+
+        if isinstance(__public_key, rsa.PublicKey):
+            __public_key = __public_key.save_pkcs1('PEM')
+
+        inc_exh = kwargs.get('include_exh', True)
 
         mc_type = 0 if __tx_is_server else 1  # 1: Client, 0: Server
         hdr_ver = 1
         hash_s = hashlib.sha256(__message.encode() if isinstance(__message, str) else __message).hexdigest()
         time = int(datetime.now().strftime(FRMT.DATETIME))
 
-        extended_header = ExtendedHeader(
-            EXH_PLATFORM=platform.platform(),
-            EXH_MACHINE=platform.machine(),
-            EXH_MAC_ADDR=hashlib.md5(f'{uuid.getnode()}'.encode()).hexdigest(),
-            EXH_KEY_MD5=(None if __public_key is None else hashlib.md5(__public_key).hexdigest())
-        )
+        if inc_exh:
+            extended_header = ExtendedHeader(
+                EXH_PLATFORM=platform.platform(),
+                EXH_MACHINE=platform.machine(),
+                EXH_MAC_ADDR=hashlib.md5(f'{uuid.getnode()}'.encode()).hexdigest(),
+                EXH_KEY_MD5=(None if __public_key is None else hashlib.md5(__public_key).hexdigest())
+            )
+
+            exh = extended_header.to_bytes()
+
+        else:
+            exh = b''
 
         __session_token = ('0' * NGHeaderItems.H_SES_TOK.SIZE) if __session_token is None else __session_token
         __client_uid = ('0' * NGHeaderItems.H_CLT_UID.SIZE) if __client_uid is None else __client_uid
@@ -438,10 +448,10 @@ class HeaderUtils:
             H_CLT_UID=__client_uid,
             H_MSG_LEN=len(__message),
             H_HSH_LEN=len(hash_s),
-            EXT_HDR_L=0
+            EXT_HDR_L=len(exh)
         )
 
-        return _NGHeader.create_bytes(ng_header, extended_header, hash_s)
+        return _NGHeader.create_bytes(ng_header, hash_s), exh, hash_s
 
     @staticmethod
     def load_ng_header(__hdr_bytes: bytes) -> NGHeader:
