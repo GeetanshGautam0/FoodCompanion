@@ -44,9 +44,9 @@ ConstantClass = Constants.Constants
 
 
 def stdout(__data: str, __pr: str = "") -> int:
-    return sys.stdout.write(f'[{__name__}%s{__pr}] {__data}\n' % (' ' if len(__pr) else ''))
+    return Functions.STDOUT(__data, __pr)
 
 
 def stderr(__data: str, __pr: str = "") -> int:
-    return sys.stderr.write(f'[{__name__}%s{__pr}] {__data}\n' % (' ' if len(__pr) else ''))
+    return Functions.STDERR(__data, __pr)
 

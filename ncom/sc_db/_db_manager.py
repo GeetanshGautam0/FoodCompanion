@@ -12,11 +12,11 @@ from typing import Any, Callable, List, Dict, Type, Tuple
 
 
 def stdout(__data: str, __pr: str = "") -> int:
-    return sys.stdout.write(f'[{__name__}{__pr}] {__data}\n')
+    return Functions.STDOUT(__data, __pr)
 
 
 def stderr(__data: str, __pr: str = "") -> int:
-    return sys.stderr.write(f'[{__name__}{__pr}] {__data}\n')
+    return Functions.STDERR(__data, __pr)
 
 
 class __database__:

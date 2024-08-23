@@ -77,12 +77,18 @@ HDR = HDR_t(
 class MSG_t(Constants):
     NEW_CONNECTION_CODE:    bytes
     DELIMITER_BYTE:         bytes
+    NG_RSA_KEY_SIZE:        int
 
 
 MSG = MSG_t(
     NEW_CONNECTION_CODE=b'<EstCon>',
-    DELIMITER_BYTE=b'~'
+    DELIMITER_BYTE=b'~',
+    NG_RSA_KEY_SIZE=512
 )
+
+
+RSABlockSize = lambda KeySize: int((KeySize / 8) - 11)
+
 
 
 # Responses
