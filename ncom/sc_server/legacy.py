@@ -12,19 +12,11 @@ from typing import Tuple
 from time import sleep
 
 
-def stdout(data: str, __pr: str = '') -> int:
-    return Functions.STDOUT(data, __pr)
-
-
-def stderr(data: str, __pr: str = '') -> int:
-    return Functions.STDERR(data, __pr)
-
-
 class LegacyServer(__fc_server__):
-    def __init__(self, ip: str, pt_db: PTDatabase, *args, **kwargs) -> None:
+    def __init__(self, ip: str, pt_db: PTDatabase, logger: Logger, *args, **kwargs) -> None:
         self.__t = __fc_thread__()
         self.__mcv__ = 20240708000000
-        __fc_server__.__init__(self, (ip, Constants.TCP.L_PORT), self.__t, *args, **kwargs)
+        __fc_server__.__init__(self, (ip, Constants.TCP.L_PORT), self.__t, logger, *args, **kwargs)
         self.__ncc__ = b'NW_CON'
         self.__pt_db__ = pt_db
 
@@ -38,17 +30,17 @@ class LegacyServer(__fc_server__):
         self.bind()
         self.start_listener(Constants.TCP.BKLOG)
 
-    def _log_as_client(self, addr: Tuple[str, int], st: str | None, message: str) -> int:
+    def _log_as_client(self, addr: Tuple[str, int], st: str | None, message: str) -> None:
         if st is None:
-            return stdout(f'<%s, %d> {message}' % addr, 'SERVER<%s, %d>' % self.__net__)
+            self.log_sc(LoggingLevel.INFO, f'CLIENT<%s,%d> {message}' % addr, 'LGSRV')
         else:
-            return stdout(f'<%s, %d :: ST %s> {message}' % (*addr, st), 'SERVER<%s, %d>' % self.__net__)
+            self.log_sc(LoggingLevel.INFO, f'CLIENT<%s,%d :: ST{st}> {message}' % addr, 'LGSRV')
 
     def _err_as_client(self, addr: Tuple[str, int], st: str | None, message: str):
         if st is None:
-            return stderr(f'<%s, %d> {message}' % addr, 'SERVER<%s, %d>' % self.__net__)
+            self.log_sc(LoggingLevel.ERROR, f'CLIENT<%s,%d> {message}' % addr, 'LGSRV')
         else:
-            return stderr(f'<%s, %d :: ST %s> {message}' % (*addr, st), 'SERVER<%s, %d>' % self.__net__)
+            self.log_sc(LoggingLevel.ERROR, f'CLIENT<%s,%d :: ST{st}> {message}' % addr, 'LGSRV')
 
     def _handle_new_conn(self, c_name: str, recv: bytes) -> None:
         # TODO: Log transmissions.
@@ -233,16 +225,10 @@ class LegacyServer(__fc_server__):
             d, r = self.sf_execute(self._reply_to_http, _rcv=recv, _conn=conn, _addr=addr)
 
             if not d:
-                stderr(r, f'SERVER<%s, %d> @_reply_to_http' % self.__net__)
+                self.log_sc(LoggingLevel.ERROR, f' @_reply_to_http E({r})', 'LGSRV')
 
             elif not r:
-                print(recv)
-
-                stderr(
-                    f'Received an invalid, non-HTTP request from {addr}',
-                    f'SERVER<%s, %d> @_on_capture_event_' % self.__net__
-                )
-
+                self._err_as_client(addr, None, 'Received an invalid, non-HTTP request.')
                 # TODO: Create a system to blacklist IP:PORT combinations if invalid requests are sent too frequently.
 
         thread.done()

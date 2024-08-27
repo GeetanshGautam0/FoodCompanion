@@ -11,12 +11,7 @@ from enum import Enum
 from typing import Any, Callable, List, Dict, Type, Tuple
 
 
-def stdout(__data: str, __pr: str = "") -> int:
-    return Functions.STDOUT(__data, __pr)
-
-
-def stderr(__data: str, __pr: str = "") -> int:
-    return Functions.STDERR(__data, __pr)
+SLogger: Logger
 
 
 class __database__:
@@ -33,10 +28,17 @@ class __database__:
     def __init__(
             self,
             file_path: Structs.File | str,
-            database_type: Enums.DatabaseType
+            database_type: Enums.DatabaseType,
+            logger: Logger
     ) -> None:
+        global SLogger
+
+        assert isinstance(logger, Logger)
+
         self.__fp__ = file_path if isinstance(file_path, Structs.File) else Structs.File(file_path, mode='f')
         self.__type__ = database_type
+        self.__logger__ = logger
+        SLogger = logger
 
         assert database_type in (Enums.DatabaseType.JSON, Enums.DatabaseType.SQLITE), 'Class __database__ not up to date.'
 
@@ -88,6 +90,7 @@ class __database__:
             *args: Any,
             **kwargs: Any
     ) -> Tuple[bool, Any | Type[BaseException]]:
+        global SLogger
 
         if __echo_command:
             def _fmt_arg(__d: Any) -> Any:
@@ -96,7 +99,9 @@ class __database__:
 
                 return __d
 
-            stdout(
+            SLogger.log(
+                LoggingLevel.INFO,
+                'DBManager.execute',
                 f'Executing {fnc.__name__.__str__()}(%s%s%s)' % (
                     (', '.join([_fmt_arg(a) for a in args])) if len(args) else '',
                     ', ' if len(args) and len(kwargs) else '',
@@ -108,7 +113,11 @@ class __database__:
             return True, fnc(*args, **kwargs)
 
         except Exception as E:
-            stderr(f'__database__._execute_ ERR @{fnc}: {E.__class__.__name__}({str(E)})')
+            SLogger.log(
+                LoggingLevel.ERROR,
+                'DBManager.execute',
+                f'ERR @{fnc}: {E.__class__.__name__}({str(E)})'
+            )
             return False, E
 
     @property
@@ -142,7 +151,7 @@ class __database__:
         assert self.__fp__.mode == Enums.FileMode.FILE
 
         if not os.path.isfile(self.__fp__.full_path):
-            stdout(f'Creating database file "{self.__fp__.file_name}"')
+            self.__logger__.log(LoggingLevel.DEBUG, 'DBManager', f'Creating database file "{self.__fp__.file_name}"')
 
             try:
                 if not os.path.isdir(self.__fp__.file_path):    # Make sure that the directory exists.
@@ -179,7 +188,7 @@ class __database__:
 
         if not s and '__class__' in dir(v):
             # An error occurred.
-            stderr(f'Could not write to database: {v.__class__.__name__}({str(v)})')
+            self.__logger__.log(LoggingLevel.ERROR, 'DBManager', f'Could not write to database: {v.__class__.__name__}({str(v)})')
 
         self.__is_ready = True
         return s, v
@@ -205,7 +214,7 @@ class __database__:
 
         if not s and '__class__' in dir(v):
             # An error occurred.
-            stderr(f'Could not read from database: {v.__class__.__name__}({str(v)})')
+            self.__logger__.log(LoggingLevel.ERROR, 'DBManager', f'Could not read from database: {v.__class__.__name__}({str(v)})')
 
         self.__is_ready = True
 
@@ -218,13 +227,16 @@ class __database__:
             self.__connector__.close()
 
         except Exception as E:
-            stderr(f'{E.__class__.__name__}({str(E)})', f' SCC->commit@{self.__desc__.table_name}')
+            self.__logger__.log(LoggingLevel.ERROR, 'DBManager', f'SCC->commit@{self.__desc__.table_name} {E.__class__.__name__}({str(E)})')
 
         self.__connector__ = None
 
+    def log(self, ll: LoggingLevel, sc: str, data: str) -> None:
+        self.__logger__.log(ll, sc, data)
+
     def __del__(self) -> None:
         if self._configured_[0] and self.__type__ == Enums.DatabaseType.SQLITE:
-            stdout(f'Committing changes and closing SQLite connector.', f' > del@{self.__desc__.table_name}')
+            self.__logger__.log(LoggingLevel.INFO, 'DBManager.del', f'Committing changes and closing SQLite connector.')
 
             # A properly-configured SQLite database; try to close the connector (if it's not already close).
             try:
@@ -261,13 +273,13 @@ class SQLFetchN:
 
 
 class SQLDatabase(__database__):
-    def __init__(self, file_path: Structs.File | str, table_descriptor: Structs.SQLTableDescriptor):
+    def __init__(self, file_path: Structs.File | str, table_descriptor: Structs.SQLTableDescriptor, logger: Logger):
         self.__connector__ = None
         self.__desc__      = table_descriptor
 
         assert self.__desc__.check, 'Invalid table descriptor.'
 
-        __database__.__init__(self, file_path, Enums.DatabaseType.SQLITE)
+        __database__.__init__(self, file_path, Enums.DatabaseType.SQLITE, logger)
 
     #
     # ------------------- HELPER FUNCTIONS -------------------
@@ -306,17 +318,17 @@ class SQLDatabase(__database__):
 
         # Make sure that the column exists in this table
         if column not in self.__desc__.columns:
-            stderr("UPD.ERR<1>      Invalid column", " @ SQLDatabase._update")
+            self.log(LoggingLevel.ERROR, 'DBManager.SQLDB.upd', "UPD.ERR<1>      Invalid column")
             return False
 
         # We must have at least one criterion provided in order to be able to update records.
         if not len(criteria):
-            stderr("UPD.ERR<2>      Provide at least one criterion", " @ SQLDatabase._update")
+            self.log(LoggingLevel.ERROR, 'DBManager.SQLDB.upd', "UPD.ERR<2>      Provide at least one criterion")
             return False
 
         # Make sure that the data type is correct.
         if not isinstance(new_data, Enums.SQLType.map_to_data_type(column.type)):
-            stderr("UPD.ERR<3>      Invalid data type", " @ SQLDatabase._update")
+            self.log(LoggingLevel.ERROR, 'DBManager.SQLDB.upd', "UPD.ERR<3>      Invalid data type")
             return False
 
         c_name = {c.name: c.type for c in self.__desc__.columns}
@@ -329,7 +341,7 @@ class SQLDatabase(__database__):
             else 0
             for k, v in criteria.items()
         ]) != len(criteria):
-            stderr(f"UPD.ERR<4>      Invalid criterion/a", " @ SQLDatabase._update")
+            self.log(LoggingLevel.ERROR, 'DBManager.SQLDB.upd', f"UPD.ERR<4>      Invalid criterion/a")
             return False
 
         command = "UPDATE %s SET %s = %s WHERE %s" % (
@@ -358,7 +370,7 @@ class SQLDatabase(__database__):
         assert len(criteria) <= len(c_name)
 
         if not len(criteria):
-            stderr("DEL.ERR<1>      Provide at least one criterion", " @ SQLDatabase._delete")
+            self.log(LoggingLevel.ERROR, 'DBManager.SQLDB.del', "DEL.ERR<1>      Provide at least one criterion")
             return False
 
         if sum([
@@ -368,7 +380,7 @@ class SQLDatabase(__database__):
             else 0
             for k, v in criteria.items()
         ]) != len(criteria):
-            stderr(f"DEL.ERR<2>      Invalid criterion/a", " @ SQLDatabase._delete")
+            self.log(LoggingLevel.ERROR, 'DBManager.SQLDB.del', "DEL.ERR<2>      Invalid criterion/a")
             return False
 
         command = "DELETE FROM %s WHERE %s" % (
@@ -394,7 +406,7 @@ class SQLDatabase(__database__):
 
         # Make sure that the connector is ready
         if not isinstance(self.__connector__, sqlite3.Connection):
-            stderr("ADD.ERR<1>      DB.CON not ready", " @ SQLDatabase._add")
+            self.log(LoggingLevel.ERROR, 'DBManager.SQLDB.add', "ADD.ERR<1>      DB.CON not ready")
             return False
 
         # Use a 'scoring' system to check the integrity of the data inputted.
@@ -421,7 +433,7 @@ class SQLDatabase(__database__):
             for c in self.__desc__.columns
         ]) != len(self.__desc__.columns)
         ):
-            stderr("ADD.ERR<2>      Invalid Data", " @ SQLDatabase._add")
+            self.log(LoggingLevel.ERROR, 'DBManager.SQLDB.add', "ADD.ERR<2>      Invalid Data")
             return False
 
         c_data: Dict[str, str] = {}
@@ -540,9 +552,9 @@ TABLE_DESCRIPTORS = __tbl_desc(
 
 
 class UserDatabase(SQLDatabase):
-    def __init__(self) -> None:
+    def __init__(self, logger: Logger) -> None:
         self.__file_name__ = "db/users.db"
-        super().__init__(self.__file_name__, TABLE_DESCRIPTORS.user_table)
+        super().__init__(self.__file_name__, TABLE_DESCRIPTORS.user_table, logger)
 
     def _uid_in_db(self, uid: int, iid: str) -> bool:
         return len(self.read(SQLReadMode.FETCH_ALL, uid=uid, iid=iid)[-1][-1]) > 0
@@ -600,11 +612,11 @@ class UserDatabase(SQLDatabase):
 
     def create_new_user(self, user: Structs.UserRecord) -> bool:
         if self._uid_in_db(user.UID.value, user.IID.value):
-            stderr("UID exists at IID", " @ _create_new_user")
+            self.log(LoggingLevel.ERROR, 'DBManager.UserDB.new', "UID exists at IID")
             return False
 
         if not len(user.name):
-            stderr("Invalid user name.", " @ _create_new_user")
+            self.log(LoggingLevel.ERROR, 'DBManager.UserDB.new', "Invalid user name.")
             return False
 
         data = {
@@ -620,7 +632,7 @@ class UserDatabase(SQLDatabase):
 
     def delete_user(self, user: Structs.UserRecord) -> bool:
         if not self._uid_in_db(user.UID.value, user.IID.value):
-            stderr("UID does not exist at IID", " @ _delete_user")
+            self.log(LoggingLevel.ERROR, 'DBManager.UserDB.del', "UID does not exist at IID")
             return False
 
         return self._sql_command_(
@@ -653,7 +665,7 @@ class UserDatabase(SQLDatabase):
                     if s:
                         o.append(user)
                     else:
-                        stderr(f'Failed to parse user: {user}', ' @ _get_user_list')  # user: exception
+                        self.log(LoggingLevel.ERROR, 'DBManager.UserDB.GUL', f'Failed to parse user: {user}')  # user: exception
 
         return o
 
@@ -734,9 +746,9 @@ class UserDatabase(SQLDatabase):
 
 
 class PTDatabase(SQLDatabase):
-    def __init__(self) -> None:
+    def __init__(self, logger: Logger) -> None:
         self.__file_name__ = "db/pt.db"
-        super().__init__(self.__file_name__, TABLE_DESCRIPTORS.pt_table)
+        super().__init__(self.__file_name__, TABLE_DESCRIPTORS.pt_table, logger)
 
     def _pid_in_db(self, pid: int, iid: str) -> bool:
         return len(self.read(SQLReadMode.FETCH_ALL, pid=pid, iid=iid)[-1][-1]) > 0
@@ -784,11 +796,11 @@ class PTDatabase(SQLDatabase):
 
     def create_new_record(self, patient_record: Structs.PT) -> bool:
         if self._pid_in_db(patient_record.PID.value, patient_record.IID.value):
-            stderr("PID exists at IID", " @ _create_new_record")
+            self.log(LoggingLevel.ERROR, 'DBManager.PTDB.new', "PID exists at IID")
             return False
 
         if not len(patient_record.name):
-            stderr("Invalid patient name.", " @ _create_new_record")
+            self.log(LoggingLevel.ERROR, 'DBManager.PTDB.new', "Invalid patient name.")
             return False
 
         data = {
@@ -804,7 +816,7 @@ class PTDatabase(SQLDatabase):
 
     def delete_patient_record(self, patient_record: Structs.PT) -> bool:
         if not self._pid_in_db(patient_record.PID.value, patient_record.IID.value):
-            stderr("PID does not exist at IID", " @ _delete_patient_record")
+            self.log(LoggingLevel.ERROR, 'DBManager.PTDB.del', "PID does not exist at IID")
             return False
 
         return self._sql_command_(
@@ -838,7 +850,7 @@ class PTDatabase(SQLDatabase):
                         o.append(pt)
 
                     else:
-                        stderr(f'Failed to parse PTr: {pt}', ' @ _get_user_list')  # pt: exception
+                        self.log(LoggingLevel.ERROR, 'DBManager.PTDB.gpl', f'Failed to parse PTr: {pt}')  # pt: exception
 
         return o
 

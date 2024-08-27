@@ -5,3 +5,4 @@ from . import enum as Enums
 from . import struct as Structs
 from . import header as Header
 from . import appinfo as AppInfo
+from .logging import Logger, LoggingLevel

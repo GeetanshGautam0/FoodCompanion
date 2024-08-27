@@ -13,14 +13,6 @@ from threading import Thread, Event, Timer
 from typing import cast, Tuple, Dict, Any, List, LiteralString
 
 
-def stdout(data: str, __pr: str = '') -> int:
-    return Functions.STDOUT(data, __pr)
-
-
-def stderr(data: str, __pr: str = '') -> int:
-    return Functions.STDERR(data, __pr)
-
-
 class __fc_thread__(Thread):
     def __init__(self, *args, **kwargs) -> None:
         super(__fc_thread__, self).__init__(*args, **kwargs)
@@ -45,9 +37,14 @@ class __fc_server__:
             self,
             network: Tuple[str, int],
             server_thread: __fc_thread__,
+            logger: Logger,
             *args,
             **kwargs
     ) -> None:
+        assert isinstance(logger, Logger)
+
+        self.__logger__ = logger
+        self.__sc__ = 'ServerTemplate'
         self.__s_thread__ = server_thread
         self.__args__ = args
         self.__kwargs__ = kwargs
@@ -64,8 +61,21 @@ class __fc_server__:
 
         self._on_init()
 
+    @property
+    def logger(self) -> Logger:
+        return self.__logger__
+
+    def log(self, ll: LoggingLevel, data: str) -> None:
+        self.logger.log(ll, self.__sc__, f'SERVER<%s,%d> {data}' % self.__net__)
+
+    def log_sc(self, ll: LoggingLevel, data: str, sc: str) -> None:
+        self.logger.log(ll, sc, f'SERVER<%s,%d> {data}' % self.__net__)
+
     def request_shutdown(self) -> None:
-        stdout('Shutdown request created.', f'SERVER<%s, %d>' % self.__net__)
+        self.log(
+            LoggingLevel.INFO,
+            'Shutdown request created.'
+        )
 
         self.__s_thread__.done()
         self._socket.close()
@@ -93,10 +103,9 @@ class __fc_server__:
 
         self._socket.listen(n)
         # self._socket.setblocking(False)
-        stdout("Listening for connections w/ bklog=%d" % n, f'SERVER<%s, %d>' % self.__net__)
+        self.log(LoggingLevel.INFO, "Listening for connections w/ bklog=%d" % n)
 
         # Secondary loop: C-OST
-
         self.__cost_task__ = Timer(self.__cost_timer__, lambda: self.sf_execute(self._clear_ost))
         self.__cost_task__.start()
 
@@ -117,7 +126,7 @@ class __fc_server__:
             )
 
             if not _ss:
-                stderr(res.__str__())
+                self.log(LoggingLevel.ERROR, f'PREcOST: {res.__class__.__name__}({str(res)})')
                 self.sf_execute(self._clear_ost)
 
                 continue  # Go back to the top
@@ -140,13 +149,13 @@ class __fc_server__:
                     thread.start()
 
         else:
-            stdout('Closing server', f'SERVER<%s, %d> @_mainloop' % self.__net__)
+            self.log(LoggingLevel.WARN, 'Closing Server')
 
     def echo_traceback(self) -> None:
         lines = traceback.format_exc().split('\n')
         tb = '\n'.join([f' {("%d" % (i + 1)).ljust(len(f"{len(lines) + 1}"))}  | {l}' for i, l in enumerate(lines)])
 
-        stderr(f'Exception ignored:\n{tb}'.strip(), 'SERVER<%s, %d> @sf_execute' % self.__net__)
+        self.log(LoggingLevel.ERROR, f'Exception ignored:\n{tb}'.strip())
 
     def sf_execute(self, fnc, *args, **kwargs) -> Tuple[bool, Any]:
         """
@@ -200,10 +209,7 @@ class __fc_server__:
                 self.__connectors__.pop(k)
 
         if p > 0:
-            stdout(
-                f"R{p} L{len(self.__connectors__)} w{self.__cost_timer__}",
-                "SERVER<%s, %d> @cOST_update" % self.__net__
-            )
+            self.log(LoggingLevel.DEBUG, f'R{p} L{len(self.__connectors__)} w{self.__cost_timer__}')
 
         self.__cost_task__ = Timer(self.__cost_timer__, lambda: self.sf_execute(self._clear_ost))
         self.__cost_task__.start()
@@ -241,7 +247,7 @@ class __fc_server__:
             return '\n'.join([f'<p>{l}</p>' for l in d])
 
         if b'GET' in _rcv and b'HTTP' in _rcv:
-            stdout(f"Replying to %s:%d as an HTTP request." % _addr, f'SERVER<%s, %d>' % self.__net__)
+            self.log(LoggingLevel.INFO, f"Replying to %s:%d as an HTTP request." % _addr)
 
             # Data not used.
             # hdrs, sep, body = _rcv.partition(b'\r\n\r\n')
@@ -296,7 +302,7 @@ class __fc_server__:
                     ('\n\t%s' % '\n\t'.join(r)).rstrip()
                 )
             )
-            stderr('OI test(s) failed: %s' % formatted_r, '_on_init')
+            self.log(LoggingLevel.ERROR, 'OI test(s) failed: %s' % formatted_r)
 
         self._net_check()
         self.__sock__ = socket.socket(socket.AF_INET, socket.SOCK_STREAM)  # Setup for TCP connection
@@ -313,7 +319,7 @@ class __fc_server__:
         assert isinstance(self.__net__[-1], int), f'Invalid Server PORT "{self.__net__[-1]}" (1).'
         assert (self.__net__[-1] <= 65535) & (self.__net__[-1] >= 0), f'Invalid Server PORT "{self.__net__[-1]}" (2).'
 
-        stdout('%s:%d - NetCheck PASS' % self.__net__, '')
+        self.log(LoggingLevel.INFO, '%s:%d - NetCheck PASS' % self.__net__)
 
     def _test_listener(self, listener) -> bool:
         try:

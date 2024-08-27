@@ -12,19 +12,11 @@ from typing import cast, Tuple
 from time import sleep
 
 
-def stdout(data: str, __pr: str = '') -> int:
-    return Functions.STDOUT(data, __pr)
-
-
-def stderr(data: str, __pr: str = '') -> int:
-    return Functions.STDERR(data, __pr)
-
-
 class NGServer(__fc_server__):
-    def __init__(self, ip: str, pt_db: PTDatabase, user_db: UserDatabase, *args, **kwargs) -> None:
+    def __init__(self, ip: str, pt_db: PTDatabase, user_db: UserDatabase, logger: Logger, *args, **kwargs) -> None:
         self.__t = __fc_thread__()
         self.__mcv__ = 20240814000000
-        __fc_server__.__init__(self, (ip, Constants.TCP.PORT), self.__t, *args, **kwargs)
+        __fc_server__.__init__(self, (ip, Constants.TCP.PORT), self.__t, logger, *args, **kwargs)
         self.__pt_db__ = pt_db
         self.__u_db__ = user_db
 
@@ -38,17 +30,17 @@ class NGServer(__fc_server__):
         self.bind()
         self.start_listener(Constants.TCP.BKLOG)
 
-    def _log_as_client(self, addr: Tuple[str, int], st: str | None, message: str) -> int:
+    def _log_as_client(self, addr: Tuple[str, int], st: str | None, message: str) -> None:
         if st is None:
-            return stdout(f'<%s, %d> {message}' % addr, 'SERVER<%s, %d>' % self.__net__)
+            self.log_sc(LoggingLevel.INFO, f'CLIENT<%s,%d> {message}' % addr, 'NGSRV')
         else:
-            return stdout(f'<%s, %d :: ST %s> {message}' % (*addr, st), 'SERVER<%s, %d>' % self.__net__)
+            self.log_sc(LoggingLevel.INFO, f'CLIENT<%s,%d :: ST{st}> {message}' % addr, 'NGSRV')
 
     def _err_as_client(self, addr: Tuple[str, int], st: str | None, message: str):
         if st is None:
-            return stderr(f'<%s, %d> {message}' % addr, 'SERVER<%s, %d>' % self.__net__)
+            self.log_sc(LoggingLevel.ERROR, f'CLIENT<%s,%d> {message}' % addr, 'NGSRV')
         else:
-            return stderr(f'<%s, %d :: ST %s> {message}' % (*addr, st), 'SERVER<%s, %d>' % self.__net__)
+            self.log_sc(LoggingLevel.ERROR, f'CLIENT<%s,%d :: ST{st}> {message}' % addr, 'NGSRV')
 
     def _get_ng_header(self, recv: bytes) -> Header.NGHeader:
         recv = recv.strip()
