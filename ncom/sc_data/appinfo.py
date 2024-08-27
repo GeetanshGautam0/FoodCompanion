@@ -6,6 +6,7 @@ from dataclasses import dataclass
 
 @dataclass
 class AppInfo(Constants):
+    # Config Items
     APP_VERSION:                int
 
     SRVC_CLT_PROMPT_IP:         bool
@@ -14,6 +15,13 @@ class AppInfo(Constants):
     SRVC_TCP_SELECT_TIMEOUT:    int
     COST_TIMER:                 float
 
+    LG_INTERVAL: int
+    LG_LOG_ERROR: bool
+    LG_LOG_WARN: bool
+    LG_LOG_INFO: bool
+    LG_LOG_DEBUG: bool
+
+    # Additional Items
     APP_DATA_PATH:              str
 
 

@@ -21,7 +21,13 @@
 08/22/2024 @ 16:08
 * Added BLOCK_ENCRYPT_DATA and BLOCK_DECRYPT_DATA to allow for the encryption and decryption of larger messages.
 
+08/26/2024 @ 19:43
+* Added a complete logging system
+    - Blockchain for detecting log tampering.
+    - Custom "validation" files for the above.
+* Integrated logger into ng.py, legacy.py, _template.py, and _db_manager.py.
+
 TODO:
 * Add a system to check that repeat commands are not issued w/ the same TX time (to make sure that transmissions cannot be cloned)
 * Add a CLI for modifying user records.
-* Logging for transmissions and console messages, commands, etc.
+* Log transmissions.

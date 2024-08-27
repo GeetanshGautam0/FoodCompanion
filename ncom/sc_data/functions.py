@@ -1,8 +1,6 @@
 import hashlib, rsa, sys
-from typing import cast, Tuple
-from dataclasses import dataclass
+from typing import Tuple
 from . import constants as sc_const
-from . import struct as sc_struct
 
 
 def memoize(func):
@@ -32,43 +30,6 @@ GET_CHECKSUM = lambda data: hashlib.sha256(GET_BYTES(data)).hexdigest()
 
 def GET_RSA_KEYS() -> Tuple[rsa.PublicKey, rsa.PrivateKey]:
     return rsa.newkeys(sc_const.MSG.NG_RSA_KEY_SIZE)
-
-
-class LoggingLevel:
-    ERROR = 0
-    WARN  = 1
-    INFO  = 2
-    DEBUG = 3
-
-
-@dataclass
-class Block:
-    prev_hash:      str
-    time_stamp:     int
-    data:           bytes
-    hash:           str
-
-
-class BlockChain:
-    def __init__(self) -> None:
-        # TODO: Implement.
-        pass
-
-
-@dataclass
-class LogFile:
-    file_struct: sc_struct.File
-    hash_file:   sc_struct.File
-    data:        BlockChain
-
-
-def LOG(fout: LogFile, logging_level: int, data: str) -> None:
-    # TODO: implement.
-    #   1. Log w/ some way of detecting tampering (parity/block-chain?)
-    #   2. Add time stamps
-    #   3. The logs do not need to be human-readable; make a GUI to display logs.
-
-    pass
 
 
 def STDOUT(data: str, __pr: str = '') -> int:

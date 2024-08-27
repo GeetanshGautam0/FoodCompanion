@@ -25,7 +25,10 @@ def auto_query_attr(attr_name: str, raise_error=False, rv=None, do_not_set=False
 
 
 class ClientUtil:
-    def __init__(self) -> None:
+    def __init__(self, logger: Logger) -> None:
+        assert isinstance(logger, Logger)
+
+        self.__lg__ = logger
         self.__keys__: Dict[str, Type[None] | rsa.Privatekey | rsa.PublicKey] = {
             'S2CPub':   None,
             'S2CPriv':  None,
@@ -41,11 +44,14 @@ class ClientUtil:
             Constants.TCP.PORT
         )
 
+    def log(self, ll: LoggingLevel, data: str, sc: str = 'ClientUtils') -> None:
+        self.__lg__.log(ll, sc, f'CLIENT<%s,%d> {data}' % self.__net__)
+
     def echo_traceback(self) -> None:
         lines = traceback.format_exc().split('\n')
         tb = '\n'.join([f' {("%d" % (i + 1)).ljust(len(f"{len(lines) + 1}"))}  | {l}' for i, l in enumerate(lines)])
 
-        stderr(f'Exception ignored:\n{tb}'.strip(), 'CLIENT<%s, %d> @sf_execute' % self.__net__)
+        self.log(LoggingLevel.ERROR, f'Exception ignored:\n{tb}'.strip())
 
     def sf_execute(self, fnc, *args, **kwargs) -> Tuple[bool, Any]:
         """
@@ -226,20 +232,21 @@ class ClientUtil:
                     'CUID':     cuid
                 }
 
-                stdout(f"Established connection w/ SERVER<%s,%d> {st=} {cuid=}" % self.__net__)
+                self.log(LoggingLevel.INFO, f"Established connection w/ SERVER<%s,%d> {st=} {cuid=}" % self.__net__)
 
                 self.__attr__ = (*self.__attr__, '__est__')
 
                 self.close_socket()
                 return None
 
-            stderr(f"Failed to establish connection w/ SERVER<%s,%d>: {status=}; {_ERR[-1]}" % self.__net__)
+            self.log(LoggingLevel.ERROR, f"Failed to establish connection w/ SERVER<%s,%d>: {status=}; {_ERR[-1]}" % self.__net__)
 
             self.close_socket()
             return _ERR
 
         except Exception as E:
-            stderr(
+            self.log(
+                LoggingLevel.ERROR,
                 f"Failed to establish connection w/ SERVER<%s,%d>: ERR-000 {E.__class__.__name__}({str(E)})"
                 % self.__net__
             )

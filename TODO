@@ -1,5 +1,0 @@
-ncom:
-    * Create a logging system
-    * Use the above to log console messages and transmissions
-    * The logs should be able to detect signs of tampering (blockchain?)
-    * Implement ng.py
