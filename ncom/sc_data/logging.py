@@ -2,10 +2,10 @@ import hashlib, os
 from .struct import File
 from dataclasses import dataclass
 from datetime import datetime
-from .constants import FRMT
+from .constants import FRMT, SZ
 from .appinfo import APPINFO
 from .settings import SETTINGS
-from typing import List
+from typing import List, Tuple, Any
 from .functions import memoize, STDOUT, STDERR
 from threading import Thread, Timer
 from enum import Enum
@@ -225,6 +225,7 @@ class Logger(Thread):
         self.__buf__ = []
 
         self.__mdata__ = {}
+        self.__stopped = False
 
         self.task = None
         self.start()
@@ -234,6 +235,19 @@ class Logger(Thread):
         self.task.cancel()
         self._add_buf()
         self.join(0)
+
+    def stop(self) -> None:
+        try:
+            self.task.cancel()
+        except:
+            pass
+
+        self.__stopped = True
+        buf, self.__buf__ = self.__buf__, []  # Empty self.__buf__ and copy contents to buf
+        for entry in buf:
+            self.__bc__.add_data(entry.encode())
+
+        self.__bc__.write()
 
     def run(self) -> None:
         (task := Timer(self.__f__, self._add_buf)).start()
@@ -280,7 +294,11 @@ class Logger(Thread):
         )
 
         log_str += f' {datetime.now().strftime(FRMT.DATETIME)} {data}'
-        self.__buf__.append(log_str)
+
+        if not self.__stopped:
+            self.__buf__.append(log_str)
+        else:
+            log_str = f'[NOT SAVED] {log_str}'
 
         match ll:
             case LoggingLevel.ERROR:
@@ -290,3 +308,66 @@ class Logger(Thread):
                 STDOUT(log_str)
 
         return log_str
+
+
+class LogParser:
+    def __init__(self, log_file: File) -> None:
+        assert os.path.isfile(log_file.full_path), 'Log file not found.'
+        hf = File(f'{log_file.file_path}\\val\\{hashlib.sha256(log_file.full_path.encode()).hexdigest()}.hf')
+        assert os.path.isfile(hf.full_path)
+
+        self.__f_desc__ = (log_file, hf)
+        self.__bc__ = BlockChain(self.__f_desc__[0], self.__f_desc__[1], '')
+
+    def get_logs(self) -> List[Tuple[Any, ...]]:
+        out = []
+
+        self.__bc__.validate()
+        parsed = self.__bc__.__bc__
+        del self.__bc__
+
+        def parser(l: str) -> Tuple[Any, ...]:
+            s_start_ctr = 0
+            s_start = []
+            s_end = []
+            in_s = False
+
+            for i, c in enumerate(l):
+                if not in_s and c == '[':
+                    assert s_start_ctr < 2
+
+                    in_s = True
+                    s_start_ctr += 1
+                    s_start.append(i + 1)
+
+                elif in_s and c == ']':
+                    in_s = False
+                    s_end.append(i)
+
+                elif not in_s and s_start_ctr == 2 and c.isnumeric():
+                    # Time code
+                    #   Not in a '[' section
+                    #   Already parsed to sections.
+
+                    s_start.append(i)
+                    s_start_ctr += 1
+                    break
+
+            assert len(s_start) and len(s_end) == 2, f'{s_start} {s_end} {l}'
+            s_end.append(s_start[-1] + SZ.DATETIME)
+
+            ret = [l[s:e] for s, e in zip(s_start, s_end)]
+            ret.append(l[s_end[-1]::].strip())
+
+            return (*ret, )
+
+        out = [
+            parser(block.data.decode())
+            for block in parsed
+            if block.index > 0
+        ]
+
+        # out.insert(0, parser(parsed[0].data.decode()))
+
+        del self
+        return out
