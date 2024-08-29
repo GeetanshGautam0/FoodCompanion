@@ -31,6 +31,11 @@
 * Started work on server and client scripts.
 * Boilerplate for LogParser
 
+08/28/2024 @ 19:44
+* Completed LogParser
+* Reworked .hf files for blockchains to make them more efficient.
+    - Also makes validation slightly faster.
+
 TODO:
 * Add a system to check that repeat commands are not issued w/ the same TX time (to make sure that transmissions cannot be cloned)
 * Add a CLI for modifying user records.

@@ -15,3 +15,5 @@
 local.properties
 _gitignore_*
 *.pdf
+
+*.gitignore.*
