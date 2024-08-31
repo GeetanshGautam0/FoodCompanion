@@ -181,12 +181,12 @@ class LogFile:
 
 
 class Logger(Thread):
-    def __init__(self, freq: int = SETTINGS.LG_INTERVAL) -> None:
+    def __init__(self, freq: int = SETTINGS.LG_INTERVAL, is_server: bool = False) -> None:
         assert freq >= 5, 'Logging frequency must be >=5s.'
         super(Logger, self).__init__()
 
         path = APPINFO.APP_DATA_PATH
-        lf = f'{path}\\fc.{datetime.now().strftime(FRMT.DATETIME)}.FCSecLog'
+        lf = f'{path}\\{"server" if is_server else "client"}\\fc.{datetime.now().strftime(FRMT.DATETIME)}.FCSecLog'
         hf = f'{path}\\val\\{hashlib.sha256(lf.encode()).hexdigest()}.hf'
         gs = 'Log file created at {time}'
 
@@ -219,6 +219,7 @@ class Logger(Thread):
             self.__bc__.add_data(entry.encode())
 
         self.__bc__.write()
+        self.join(0)
 
     def run(self) -> None:
         (task := Timer(self.__f__, self._add_buf)).start()
@@ -284,7 +285,7 @@ class Logger(Thread):
 class LogParser:
     def __init__(self, log_file: File) -> None:
         assert os.path.isfile(log_file.full_path), 'Log file not found.'
-        hf = File(f'{log_file.file_path}\\val\\{hashlib.sha256(log_file.full_path.encode()).hexdigest()}.hf')
+        hf = File(f'{APPINFO.APP_DATA_PATH}\\val\\{hashlib.sha256(log_file.full_path.encode()).hexdigest()}.hf')
         assert os.path.isfile(hf.full_path)
 
         self.__f_desc__ = (log_file, hf)

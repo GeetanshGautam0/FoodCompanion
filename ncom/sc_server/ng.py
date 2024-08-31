@@ -9,7 +9,6 @@ except ImportError:
 
 import sys, rsa, hashlib, uuid, json
 from typing import cast, Tuple
-from time import sleep
 
 
 class NGServer(__fc_server__):
@@ -32,15 +31,15 @@ class NGServer(__fc_server__):
 
     def _log_as_client(self, addr: Tuple[str, int], st: str | None, message: str) -> None:
         if st is None:
-            self.log_sc(LoggingLevel.INFO, f'CLIENT<%s,%d> {message}' % addr, 'NGSRV')
+            self.log_sc(LoggingLevel.INFO, f'CLIENT<{addr[0]},{addr[1]}> {message}', 'NGSRV')
         else:
-            self.log_sc(LoggingLevel.INFO, f'CLIENT<%s,%d :: ST{st}> {message}' % addr, 'NGSRV')
+            self.log_sc(LoggingLevel.INFO, f'CLIENT<{addr[0]},{addr[1]} :: ST{st}> {message}', 'NGSRV')
 
     def _err_as_client(self, addr: Tuple[str, int], st: str | None, message: str):
         if st is None:
-            self.log_sc(LoggingLevel.ERROR, f'CLIENT<%s,%d> {message}' % addr, 'NGSRV')
+            self.log_sc(LoggingLevel.ERROR, f'CLIENT<{addr[0]},{addr[1]}> {message}', 'NGSRV')
         else:
-            self.log_sc(LoggingLevel.ERROR, f'CLIENT<%s,%d :: ST{st}> {message}' % addr, 'NGSRV')
+            self.log_sc(LoggingLevel.ERROR, f'CLIENT<{addr[0]},{addr[1]} :: ST{st}> {message}', 'NGSRV')
 
     def _get_ng_header(self, recv: bytes) -> Header.NGHeader:
         recv = recv.strip()
@@ -178,6 +177,7 @@ class NGServer(__fc_server__):
             'PEM'
         )
         assert vKey, f'{Constants.RESPONSES.ERRORS.BAD_REQUEST} E008   E2E-Encryption: !vPEM S2CPubKey'
+        assert isinstance(S2CPubKey, rsa.PublicKey), f'{Constants.RESPONSES.ERRORS.BAD_REQUEST} E008   E2E-Encryption: !vPEM S2CPubKey'
 
         C2SPubKey, C2SPrivKey = Functions.GET_RSA_KEYS()
         ses_tok = self._gen_ses_tok("ST")
@@ -188,12 +188,104 @@ class NGServer(__fc_server__):
             b":DELIM:".join([ses_tok.encode(), cuid.encode(), C2SPubKey.save_pkcs1("PEM")])
         )
 
-        rsp = Functions.BLOCK_ENCRYPT_DATA(rsp, cast(rsa.PublicKey, S2CPubKey))
-        conn.send(self._create_tx(ses_tok, cuid, rsp, sf_mode=True))
+        rspe = Functions.BLOCK_ENCRYPT_DATA(rsp, cast(rsa.PublicKey, S2CPubKey))
+        tx_data = self._create_tx(ses_tok, cuid, rspe, sf_mode=True)
+
+        self.__sessions__[ses_tok] = {
+            'C2SKey': {  # For C->S communications.
+                'PrivatePEM':   C2SPrivKey.save_pkcs1('PEM'),
+                'PublicPEM':    C2SPubKey.save_pkcs1('PEM'),
+                'PublicCHK':    hashlib.md5(C2SPubKey.save_pkcs1('PEM')).hexdigest()
+            },
+            'S2CKey': {  # For S->C com
+                'PublicPEM':    S2CPubKey.save_pkcs1('PEM'),
+                'PublicCHK':    hashlib.md5(S2CPubKey.save_pkcs1('PEM')).hexdigest()
+            },
+            'ComHistory': {
+                (f_com_id := self.com_hist_key(ses_tok, rx.hdr.H_TX_TIME)): (
+                    Header._NGHeader.create_bytes(rx.hdr, ''),
+                    rx.exh.to_bytes(),
+                    rx.chk,
+                    rx.msg
+                ),
+            },
+            'ReplyHistory': {
+                f_com_id: (rsp, rspe, tx_data),
+            },
+            'IsActive': True,
+            'Attributes':
+                [
+                    f'{rx.hdr.H_APP_VIS=}',
+                    f'{cuid=}',
+                    'mode_NG',
+                    f'{rx.hdr.H_COM_CHK=}',
+                ],
+            'fComID': f_com_id
+        }
+
+        conn.send(tx_data)
+
+    def com_hist_key(self, st: str, tx_time: int) -> str:
+        i = 0
+        while i <= 999_999:
+            s = str(i).rjust(6, '0')
+            if (out := f'{tx_time}-{s}') not in self.__sessions__.get(st, {}).get('ComHistory', []):
+                return out
+
+        raise Exception("Cannot log ComHistory")
 
     def _con_conn(self, c_name: str, hdr: Header.NGHeader, recv: bytes) -> None:
-        # TODO: Log transmissions.
-        assert False, Constants.RESPONSES.ERRORS.GENERAL
+        thread, conn, addr = self.__connectors__[c_name]
+
+        s, rx = self.sf_execute(self._get_tx, c_name, hdr, recv)
+        assert s and isinstance(rx, Structs.Transmission), \
+            f'{Constants.RESPONSES.ERRORS.GENERAL} E001   Could not load Rx struct.'
+
+        assert rx.hdr.MSGINTENT == 'C', f'{Constants.RESPONSES.ERRORS.BAD_HEADER} MSGINTENT'
+
+        assert (si := self.__sessions__[rx.hdr.H_SES_TOK]) is not None, f'{Constants.RESPONSES.ERRORS.INVALID_SESSION_ID} SESTOK'
+        assert f'cuid=\'{rx.hdr.H_CLT_UID}\'' in si['Attributes'], f'{Constants.RESPONSES.ERRORS.INVALID_SESSION_ID} CUID'
+        assert (pkchk := si.get('C2SKey', {}).get('PublicCHK')) is not None, f'{Constants.RESPONSES.ERRORS.INVALID_SESSION_ID} PKCHK'
+        assert pkchk == rx.exh.EXH_KEY_MD5, f'{Constants.RESPONSES.ERRORS.INVALID_SESSION_ID} PKCHK'
+        assert si['IsActive'], f'{Constants.RESPONSES.ERRORS.INVALID_SESSION_ID} Session deactivated.'
+
+        assert f'{rx.hdr.H_APP_VIS=}' in si["Attributes"], f'{Constants.RESPONSES.ERRORS.INCOMPATIBLE_VERSION} E-001A'
+        assert f'{rx.hdr.H_COM_CHK=}' in si["Attributes"], f'{Constants.RESPONSES.ERRORS.INCOMPATIBLE_VERSION} E-001B'
+        assert rx.hdr.H_MC_TYPE == 1, f'{Constants.RESPONSES.ERRORS.BAD_TRANSMISSION} E-002 Send from client.'
+
+        fcom_exh = Header.HeaderUtils.load_exh(si['ComHistory'][si['fComID']][1])
+        assert fcom_exh.EXH_MACHINE == rx.exh.EXH_MACHINE, f'{Constants.RESPONSES.ERRORS.BAD_REQUEST} E-003A'
+        assert fcom_exh.EXH_PLATFORM == rx.exh.EXH_PLATFORM, f'{Constants.RESPONSES.ERRORS.BAD_REQUEST} E-003B'
+        assert fcom_exh.EXH_MAC_ADDR == rx.exh.EXH_MAC_ADDR, f'{Constants.RESPONSES.ERRORS.BAD_REQUEST} E-003C'
+
+        assert len(mh := hashlib.sha256(rx.msg).hexdigest()) == 64, f'{Constants.RESPONSES.ERRORS.BAD_TRANSMISSION} E-004A {mh}'
+        assert mh == rx.chk, f'{Constants.RESPONSES.ERRORS.BAD_TRANSMISSION} E-004B {mh}'
+
+        assert (sd := self.sf_execute(rsa.PrivateKey.load_pkcs1, si['C2SKey']['PrivatePEM'], 'PEM'))[0], f'{Constants.RESPONSES.ERRORS.GENERAL} E-006 (fatal)'
+        _, priv_c2s_key = sd
+        print(priv_c2s_key)
+        print(rx.msg)
+        assert (sd1 := self.sf_execute(Functions.BLOCK_DECRYPT_DATA, data=rx.msg, private_key=priv_c2s_key))[0], f'{Constants.RESPONSES.ERRORS.BAD_REQUEST} E-007'
+        _, dec_msg = sd1
+
+        assert len(dec_msg) >= 4, f'{Constants.RESPONSES.ERRORS.BAD_REQUEST} E-005A'
+        assert (intent := dec_msg[:4].strip().decode()) in ('ECC', 'RFF', ''), f'{Constants.RESPONSES.ERRORS.BAD_REQUEST} E-005B {intent=}'
+
+        if intent == '':
+            intent = 'OTHER'
+
+        self.__sessions__[rx.hdr.H_SES_TOK]['ComHistory'][self.com_hist_key(rx.hdr.H_SES_TOK, rx.hdr.H_TX_TIME)] = (
+            Header._NGHeader.create_bytes(rx.hdr, ''),
+            rx.exh.to_bytes().decode(),
+            rx.chk,
+            rx.msg,
+            {
+                'intent': intent,
+                'dec_msg': dec_msg
+            }
+        )
+
+        assert False, f'{Constants.RESPONSES.ERRORS.GENERAL} Not Implemented'
 
     def _on_capture_event_(self, c_name: str) -> None | str:
         """
@@ -266,3 +358,9 @@ class NGServer(__fc_server__):
                 )
 
         thread.done()
+        conn.close()
+
+    def _shutdown(self) -> None:
+        # Shutdown tasks
+        # Log sessions
+        self.log_sessions()

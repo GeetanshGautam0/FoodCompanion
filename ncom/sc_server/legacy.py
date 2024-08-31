@@ -32,15 +32,15 @@ class LegacyServer(__fc_server__):
 
     def _log_as_client(self, addr: Tuple[str, int], st: str | None, message: str) -> None:
         if st is None:
-            self.log_sc(LoggingLevel.INFO, f'CLIENT<%s,%d> {message}' % addr, 'LGSRV')
+            self.log_sc(LoggingLevel.INFO, f'CLIENT<{addr[0]},{addr[1]}> {message}', 'LGSRV')
         else:
-            self.log_sc(LoggingLevel.INFO, f'CLIENT<%s,%d :: ST{st}> {message}' % addr, 'LGSRV')
+            self.log_sc(LoggingLevel.INFO, f'CLIENT<{addr[0]},{addr[1]} :: ST{st}> {message}', 'LGSRV')
 
     def _err_as_client(self, addr: Tuple[str, int], st: str | None, message: str):
         if st is None:
-            self.log_sc(LoggingLevel.ERROR, f'CLIENT<%s,%d> {message}' % addr, 'LGSRV')
+            self.log_sc(LoggingLevel.ERROR, f'CLIENT<{addr[0]},{addr[1]}> {message}', 'LGSRV')
         else:
-            self.log_sc(LoggingLevel.ERROR, f'CLIENT<%s,%d :: ST{st}> {message}' % addr, 'LGSRV')
+            self.log_sc(LoggingLevel.ERROR, f'CLIENT<{addr[0]},{addr[1]} :: ST{st}> {message}', 'LGSRV')
 
     def _handle_new_conn(self, c_name: str, recv: bytes) -> None:
         # TODO: Log transmissions.
@@ -152,8 +152,7 @@ class LegacyServer(__fc_server__):
         self._log_as_client(addr, hdr.H_SES_TOK, f'Validate<TX_MSG :: {TX_CHK=}>')
 
         priv_key = session.get('C2SKey', {}).get('PrivateKey', None)
-        if not isinstance(priv_key, rsa.PrivateKey):
-            assert False, Constants.RESPONSES.ERRORS.INVALID_SESSION_ID
+        assert isinstance(priv_key, rsa.PrivateKey), Constants.RESPONSES.ERRORS.INVALID_SESSION_ID
 
         dec = rsa.decrypt(TX_MSG, priv_key).decode()
         data = dec.split('~')
@@ -232,3 +231,8 @@ class LegacyServer(__fc_server__):
                 # TODO: Create a system to blacklist IP:PORT combinations if invalid requests are sent too frequently.
 
         thread.done()
+
+    def _shutdown(self) -> None:
+        # Shutdown tasks
+        # Log sessions
+        self.log_sessions()

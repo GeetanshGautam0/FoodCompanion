@@ -4,7 +4,7 @@ from threading import Thread
 import hashlib
 
 
-__logger = Logger()
+__logger = Logger(is_server=True)
 _s_data = ServerData(
     logger=__logger,
     patient_database=PTDatabase(__logger),
@@ -30,10 +30,9 @@ def eh(tp, *args) -> None:
 
     if tp == KeyboardInterrupt:
         for i, f in enumerate(_s_data.shutdown_tasks):
-            try:
-                f()
-            except Exception as E:
-                _s_data.logger.log(LoggingLevel.WARN, 'GEH', f"Skipped Task#{i + 1} <{E.__class__.__name__}: {str(E)}>")
+            s, d = sf_execute(_s_data.logger, f)
+            if not s:
+                _s_data.logger.log(LoggingLevel.WARN, 'GEH', f"Skipped Task#{i + 1} <{d.__class__.__name__}: {str(d)}>")
 
         sys.exit('KB-INT')
     sys.__excepthook__(tp, *args)
@@ -105,10 +104,15 @@ class CLI:
     def not_impl(fnc: str) -> None:
         raise Exception(f'Function {fnc} not implemented yet.')
 
+    @staticmethod
+    def new_user() -> None:
+        raise Exception
+        print('new user')
+
     commands = {
         'STOP':         ('Shutdown server and quit.', ls.__s_thread__.done),
         'HELP':         ('Show this information.', help_message),
-        'NEW_USER':     ('Register a new user.', lambda *_, **__: CLI.not_impl('NEW_USER')),
+        'NEW_USER':     ('Register a new user.', new_user),
         'REM_USER':     ('Remove a new user.', lambda *_, **__: CLI.not_impl('REM_USER')),
         'LIST_USER':    ('Get a user list.', lambda *_, **__: CLI.not_impl('LIST_USER')),
         'USER_ACCESS':  ('Manage user access', lambda *_, **__: CLI.not_impl('USER_ACCESS')),
@@ -128,7 +132,7 @@ while (((not ls.__s_thread__.is_done) or (not ns.__s_thread__.is_done))
         CLI.help_message()
 
     else:
-        CLI.commands[inp][-1]()
+        sf_execute(_s_data.logger, CLI.commands[inp][-1], sfe_echo_tb=True)
 
 else:
     for i, task in enumerate(_s_data.shutdown_tasks):

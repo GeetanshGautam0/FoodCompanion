@@ -117,7 +117,15 @@ TX_CHK format:
 
 TX_MSG:
     If you're establishing a new session, use the command '<EstCon>'
-    If you're continuing a session, use the "form" sent back by the server.
+
+    To get a "form" (see Forms), send 'ECC ' + <Command>
+    For example, "ECC GET-P-RCD"
+
+    To reply w/ a filled form, send 'RFF ' + <Filled Form>
+    For example, "RFF PTR-1a<...> >> ..."
+
+    In any other case, start the communication w/ 4 empty spaces.
+    For example, "    ..."
 
 Forms:
     Forms have two sections:
@@ -125,21 +133,24 @@ Forms:
         2. Arguments
 
     Commands:
-        There are four BASE commands:
+        There are 4 BASE commands:
             1. GET      Get record(s)
             2. UPD      Update record
             3. DEL      Delete record/Remove from list
             4. NEW      Create record/Add to a list
 
-        There are two SELECTORS:
+        There are 2 SELECTORS:
             1. P        Patient records
             2. F        Food records
+            3. U        User records
 
-        There are 34 MODIFIERS:
+        There are 6 MODIFIERS:
             1. RCD      Record (PtR/FdR)
             2. DET      Diet
             3. LST      List
             4. OMI      Omission
+            5. ACC      Access
+            6. PSW      Password hash
 
     Fields (Arguments):
 
@@ -177,6 +188,12 @@ Forms:
             &userAC;    User Access Code        (str)
             &txTime;    Transmission Time       (int)          * Use the DATETIME format.
 
+            &nUserAC;   User access code 2      (str)
+            &nUserID;   User ID 2               (int)
+            &access;    Access level(s)         (str)           * Use '+' as delim.
+            &newAC;     New access code (pass)  (str)
+
+
 Accepted commands (updated 12/AUG/2024):
     * Note that all commands must be encrypted w/ the public key sent by the server.
     * Any unencrypted commands will be ignored.
@@ -201,6 +218,15 @@ Accepted commands (updated 12/AUG/2024):
     "DEL-F-OMI"         Remove diet order from omitted list.    FORM-FDR-3b.                                        **
     "GET-F-DET"         Get a list of diet orders.              FORM-FDR-5                                          -
     "NEW-F-DET"         Create a new diet order.                FORM-FDR-4.                                         **
+
+    "GET-U-RCD"         Get a user record                       FORM-URC-1a                                         **
+    "GET-U-LST"         Get a list of all users.                FORM-URC-1b                                         **
+    "NEW-U-RCD"         Create a new user                       FORM-URC-2a                                         **
+    "DEL-U-RCD"         Remove a user                           FORM-URC-2b                                         **      Cannot modify self
+    "NEW-U-ACC"         Add access level(s) to user             FORM-URC-3P                                         **      Cannot modify self; current user must be AL >= 3 (moderator); cannot modify access greater than current user's access.
+    "DEL-U-ACC"         Remove access level(s) from user        FORM-URC-3R                                         **      Cannot modify self; current user must be AL >= 3 (moderator); cannot modify access greater than current user's access.
+    "UPD-U-PSW"         Update user password hash (access code) FORM-URC-4                                          **
+
     -------------------------------------------------------------------------------------------------------------------------------------
 
 FUD:
@@ -247,6 +273,29 @@ FORM-FDR-4
 
 FORM-FDR-5
     "FDR-5 <[&iid;]> >> [FUD]"
+
+FORM-URC-1a
+             | ---------- Login credentials --------| | User to get |
+    "URC-1a<[&iid;].[&userID;].[&userAC;].[%txTime;].[&nUserID;]> >> [FUD]"
+
+FORM-URC-1b
+    "URC-1b<[&iid;].[&userID;].[&userAC;].[%txTime;]> >> [FUD]"
+
+FORM-URC-2a
+    "URC-2a<[&iid;].[&userID;].[&userAC;].[%txTime;].[&nUserID;].[&nUserAC;].[&access;]> >> [FUD]"
+
+FORM-URC-2b
+    "URC-2b<[&iid;].[&userID;].[&userAC;].[%txTime;].[&nUserID;].[&nUserAC;]> >> [FUD]"
+
+FORM-URC-3P
+    "URC-3P<[&iid;].[&userID;].[&userAC;].[%txTime;].[&nUserID;].[&access;]> >> [FUD]"
+
+FORM-URC-3R
+    "URC-3R<[&iid;].[&userID;].[&userAC;].[%txTime;].[&nUserID;].[&access;]> >> [FUD]"
+
+FORM-URC-4
+    "URC-4 <[&iid;].[&userID;].[&userAC;].[%txTime;].[&nUserID;].[&nUserAC;].[&newAC;]> >> [FUD]"
+
 
 Responses:
 

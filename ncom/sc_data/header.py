@@ -209,6 +209,8 @@ class _NGHeader:
 
     @staticmethod
     def load_exh_from_bytes(__bytes: bytes) -> ExtendedHeader:
+        assert isinstance(__bytes, bytes)
+
         exh_delim = b'<EXH_DELIM>'
         exh_null = b'<EXH_NO_DATA>'
 

@@ -45,7 +45,7 @@ class ClientUtil:
         )
 
     def log(self, ll: LoggingLevel, data: str, sc: str = 'ClientUtils') -> None:
-        self.__lg__.log(ll, sc, f'CLIENT<%s,%d> {data}' % self.__net__)
+        self.__lg__.log(ll, sc, f'CLIENT<{self.__net__[0]},{self.__net__[1]}> {data}')
 
     def echo_traceback(self) -> None:
         lines = traceback.format_exc().split('\n')
@@ -89,6 +89,9 @@ class ClientUtil:
             intent_create_new=False,
             encrypt=True
     ) -> Tuple[bool, Any]:
+        if encrypt:  # Session must be established.
+            assert '__est__' in self.__attr__, 'Connection not established.'
+
         if self.sock is None:
             s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             s.connect(self.__net__)
@@ -117,6 +120,7 @@ class ClientUtil:
         )
 
         out = tx_hdr + tx_exh + tx_chk.encode() + tx_msg
+        print(st, cuid, pub_key, out)
         return self.sf_execute(self.sock.send, out)
 
     def get_response(self, recv_len: int) -> Tuple[bool, Any]:
@@ -193,6 +197,7 @@ class ClientUtil:
             assert (d := self.send_message(tx_msg, intent_create_new=True, encrypt=False))[0], \
                 f'Could not send message: {d[-1]}'
             s, rx = self.get_response(Header.NGHeaderItems.header_length())
+            assert not rx.startswith(b'ERR.'), rx.decode()
             assert self._detect_header(rx), f'Bad RX'
             rx = self.parse(rx)
 
@@ -232,14 +237,14 @@ class ClientUtil:
                     'CUID':     cuid
                 }
 
-                self.log(LoggingLevel.INFO, f"Established connection w/ SERVER<%s,%d> {st=} {cuid=}" % self.__net__)
+                self.log(LoggingLevel.INFO, f"Established connection w/ SERVER<{self.__net__[0],self.__net__[1]}> {st=} {cuid=}")
 
                 self.__attr__ = (*self.__attr__, '__est__')
 
                 self.close_socket()
                 return None
 
-            self.log(LoggingLevel.ERROR, f"Failed to establish connection w/ SERVER<%s,%d>: {status=}; {_ERR[-1]}" % self.__net__)
+            self.log(LoggingLevel.ERROR, f"Failed to establish connection w/ SERVER<{self.__net__[0],self.__net__[1]}>: {status=}; {_ERR[-1]}")
 
             self.close_socket()
             return _ERR
@@ -247,8 +252,7 @@ class ClientUtil:
         except Exception as E:
             self.log(
                 LoggingLevel.ERROR,
-                f"Failed to establish connection w/ SERVER<%s,%d>: ERR-000 {E.__class__.__name__}({str(E)})"
-                % self.__net__
+                f"Failed to establish connection w/ SERVER<{self.__net__[0],self.__net__[1]}>: ERR-000 {E.__class__.__name__}({str(E)})"
             )
 
             self.close_socket()
@@ -265,7 +269,8 @@ class ClientUtil:
         self.__keys__ = {k: None for k in self.__keys__.keys()}
         self.__c_data__ = {}
 
-        self.close_socket()
+        if isinstance(self.sock, socket.socket):
+            self.close_socket()
 
     @auto_query_attr('__gen_keys__', False, None)
     def _gen_keys(self) -> None:
