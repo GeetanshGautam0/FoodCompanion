@@ -67,7 +67,7 @@ def echo_traceback(logger: Logger | DummyLogger) -> None:
     lines = traceback.format_exc().split('\n')
     tb = '\n'.join([f' {("%d" % (i + 1)).ljust(len(f"{len(lines) + 1}"))}  | {l}' for i, l in enumerate(lines)])
 
-    logger.log(LoggingLevel.ERROR, f'Exception ignored:\n{tb}'.strip())
+    logger.log(LoggingLevel.ERROR, 'STDImp', f'Exception ignored:\n{tb}'.strip())
 
 
 def sf_execute(logger: Logger | DummyLogger, fnc, *args, **kwargs) -> Tuple[bool, Any]:

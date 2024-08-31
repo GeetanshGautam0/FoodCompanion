@@ -6,7 +6,7 @@ except ImportError:
     from ..sc_db import *
 
 
-import sys, socket, re, select, rsa, hashlib, traceback, random
+import sys, socket, re, select, rsa, hashlib, traceback, random, json
 from time import sleep, strftime, gmtime
 from datetime import datetime
 from threading import Thread, Event, Timer
@@ -82,6 +82,7 @@ class __fc_server__:
         self.__is_alive__ = False
 
         self.sf_execute(self.__cost_task__.cancel)
+        self.sf_execute(self._shutdown)
 
     def bind(self) -> None:
         if not self._configured[0]:
@@ -185,6 +186,15 @@ class __fc_server__:
 
     # -------- Internal Functions --------
 
+    def log_sessions(self) -> None:
+        if len(self.__sessions__):
+            lines = [f'{s}: {d}' for s, d in self.__sessions__.items()]
+            frmt_lines = '\n'.join([f' {("%d" % (i + 1)).ljust(len(f"{len(lines) + 1}"))}  | {l}' for i, l in enumerate(lines)])
+            self.logger.log(LoggingLevel.INFO, 'ServerTemplate', f'ServerManager<{self.__net__[0]},{self.__net__[1]}> - SESSIONS:\n{frmt_lines}')
+
+        else:
+            self.logger.log(LoggingLevel.WARN, 'ServerTemplate', f'ServerManager<{self.__net__[0]},{self.__net__[1]}> - No sessions to log.')
+
     def _shutdown(self) -> None:
         raise Exception("Not Implemented.")
 
@@ -200,11 +210,7 @@ class __fc_server__:
         p = 0
         for k, (t, s, *_) in {**self.__connectors__}.items():  # Copy to avoid runtime errors.
             if t.is_done:
-                try:
-                    s.close()
-                except:
-                    pass
-
+                self.sf_execute(s.close)
                 p += 1
                 self.__connectors__.pop(k)
 
@@ -231,7 +237,7 @@ class __fc_server__:
             lines = [
                 '| %s |  %s' % (
                     f'{i + 1}'.rjust(len(f'{len(r) + 1}')),
-                    line.replace('<', '&lt').replace('>', '&gt')
+                    line.replace('<', '&lt').replace('>', '&gt').replace('%', '%%')
                 ) for i, line in enumerate(r)
             ]
 
@@ -247,7 +253,7 @@ class __fc_server__:
             return '\n'.join([f'<p>{l}</p>' for l in d])
 
         if b'GET' in _rcv and b'HTTP' in _rcv:
-            self.log(LoggingLevel.INFO, f"Replying to %s:%d as an HTTP request." % _addr)
+            self.log(LoggingLevel.INFO, f"Replying to {_addr} as an HTTP request.")
 
             # Data not used.
             # hdrs, sep, body = _rcv.partition(b'\r\n\r\n')

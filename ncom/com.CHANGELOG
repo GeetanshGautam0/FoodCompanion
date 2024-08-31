@@ -36,6 +36,20 @@
 * Reworked .hf files for blockchains to make them more efficient.
     - Also makes validation slightly faster.
 
+08/30/2024 @ 19:49
+* Modifications to `ng_com_spec`
+    - Ability to modify user records
+    - "Intent descriptions" for post-connection-establishment communications.
+* Framework for _con_comm in `sc_server/ng.py`
+    - Data checking/validation
+* Update README.md
+* Added a basic log parser to convert "BC"&HF logs to easy-to-read txt files.
+* Change to Logger to allow for subdivision of logs into `server` and `client` folders.
+    - `val` folder still used for `.hf` files.
+
+Bugfix:
+    * Removed '%' format characters in some lines to avoid inadvertant formatting errors.
+
 TODO:
 * Add a system to check that repeat commands are not issued w/ the same TX time (to make sure that transmissions cannot be cloned)
 * Add a CLI for modifying user records.
