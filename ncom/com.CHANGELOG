@@ -50,6 +50,14 @@
 Bugfix:
     * Removed '%' format characters in some lines to avoid inadvertant formatting errors.
 
+09/01/2024 @ 20:16
+* Experimented w/ 20 concurrent clients (see logs in README.md)
+* Boilerplate for GET, NEW, DEL, and UPD commands.
+
+Bugfix:
+* Added a missing `i += 1` line in `_con_conn` which had previously led to a frozen server upon the second request.
+
+
 TODO:
 * Add a system to check that repeat commands are not issued w/ the same TX time (to make sure that transmissions cannot be cloned)
 * Add a CLI for modifying user records.

@@ -66,10 +66,10 @@ class __fc_server__:
         return self.__logger__
 
     def log(self, ll: LoggingLevel, data: str) -> None:
-        self.logger.log(ll, self.__sc__, f'SERVER<%s,%d> {data}' % self.__net__)
+        self.logger.log(ll, self.__sc__, ('SERVER<%s,%d> ' % self.__net__) + data)
 
     def log_sc(self, ll: LoggingLevel, data: str, sc: str) -> None:
-        self.logger.log(ll, sc, f'SERVER<%s,%d> {data}' % self.__net__)
+        self.logger.log(ll, sc, ('SERVER<%s,%d> ' % self.__net__) + data)
 
     def request_shutdown(self) -> None:
         self.log(
@@ -82,7 +82,16 @@ class __fc_server__:
         self.__is_alive__ = False
 
         self.sf_execute(self.__cost_task__.cancel)
+        self.sf_execute(self._close_all_sockets)
         self.sf_execute(self._shutdown)
+
+    def _close_all_sockets(self) -> None:
+        for c_name, (thread, conn, addr) in self.__connectors__.items():
+            s = self.sf_execute(thread.done)[0]
+            s |= self.sf_execute(thread.join, 0)[0]
+            s |= self.sf_execute(conn.close)[0]
+
+            self.log(LoggingLevel.DEBUG, f'CAS<{c_name}, {addr}>')
 
     def bind(self) -> None:
         if not self._configured[0]:
