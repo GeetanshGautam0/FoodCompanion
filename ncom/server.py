@@ -107,7 +107,6 @@ class CLI:
     @staticmethod
     def new_user() -> None:
         raise Exception
-        print('new user')
 
     commands = {
         'STOP':         ('Shutdown server and quit.', ls.__s_thread__.done),

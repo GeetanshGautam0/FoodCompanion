@@ -93,7 +93,10 @@ class NGServer(__fc_server__):
             exh = Header.HeaderUtils.load_exh(tx_sections[0])
 
         tx_sections[-2] = tx_sections[-2].decode()
-        return Structs.Transmission(hdr, exh, *tx_sections[-2::])
+        rx = Structs.Transmission(hdr, exh, *tx_sections[-2::])
+
+        self._log_as_client(addr, hdr.H_SES_TOK, f'{c_name=} rx<{rx.hdr}; {rx.exh}; {rx.chk}; {rx.msg}>')
+        return rx
 
     def _compatible_com_chk(self, com_chk: str, addr: Tuple[str, int], st: str | None) -> bool:
         warn = ('0' * Header.NGHeaderItems.H_COM_CHK.SIZE, )
@@ -203,10 +206,11 @@ class NGServer(__fc_server__):
             },
             'ComHistory': {
                 (f_com_id := self.com_hist_key(ses_tok, rx.hdr.H_TX_TIME)): (
-                    Header._NGHeader.create_bytes(rx.hdr, ''),
-                    rx.exh.to_bytes(),
+                    rx.hdr,
+                    rx.exh,
                     rx.chk,
-                    rx.msg
+                    rx.msg,
+                    thread, addr, c_name
                 ),
             },
             'ReplyHistory': {
@@ -232,14 +236,76 @@ class NGServer(__fc_server__):
             if (out := f'{tx_time}-{s}') not in self.__sessions__.get(st, {}).get('ComHistory', []):
                 return out
 
+            i += 1
+
         raise Exception("Cannot log ComHistory")
+
+    def _handle_commands(self, c_name: str, intent: str, message: bytes, hdr: Header.NGHeader) -> str:
+        try:
+            match intent:
+                case 'ECC':
+                    assert message.count(b'-') == 2
+                    assert (sfs := self.sf_execute(message.decode))[0], 'CODEC_ERROR'
+                    _, message = cast(Tuple[bool, str], sfs)
+
+                    command, selector, modifier = message.split('-')
+                    assert (command := command.strip().upper()) in ('GET', 'NEW', 'UPD', 'DEL'), f'Command<{command}>'
+                    assert (selector := selector.strip().upper()) in ('P', 'F', 'U'), f'Selector<{selector}>'
+                    assert (modifier := modifier.strip().upper()) in ('RCD', 'DET', 'LST', 'OMI', 'ACC', 'PSW'), f'Modifier<{modifier}>'
+
+                    assert (fnc := getattr(self, f'_{command.lower()}', None)) is not None, f'Command<{command}>'
+                    return cast(str, fnc(c_name, selector, modifier, hdr))
+
+                case 'RFF':
+                    pass
+
+                case 'OTHER':
+                    pass
+
+                case _:
+                    assert False, f'Intent<{intent}>'
+
+        except AssertionError as E:
+            assert False, f'{Constants.RESPONSES.ERRORS.BAD_REQUEST} {str(E)}'
+
+        except Exception as E:
+            self.echo_traceback()
+            assert False, f'{Constants.RESPONSES.ERRORS.GENERAL} Exception@_handler<{E.__class__.__name__}, {str(E)}>'
+
+    def _get(self, c_name: str, sel: str, mod: str, hdr: Header.NGHeader) -> str:
+        _, conn, addr = self.__connectors__[c_name]
+        st = hdr.H_SES_TOK
+        self._log_as_client(addr, st, f'Received Command<ECC.get; Sel<{sel}> Mod<{mod}>>')
+
+        return ''
+
+    def _new(self, c_name: str, sel: str, mod: str, hdr: Header.NGHeader) -> str:
+        _, conn, addr = self.__connectors__[c_name]
+        st = hdr.H_SES_TOK
+        self._log_as_client(addr, st, f'Received Command<ECC.new; Sel<{sel}> Mod<{mod}>>')
+
+        return ''
+
+    def _del(self, c_name: str, sel: str, mod: str, hdr: Header.NGHeader) -> str:
+        _, conn, addr = self.__connectors__[c_name]
+        st = hdr.H_SES_TOK
+        self._log_as_client(addr, st, f'Received Command<ECC.del; Sel<{sel}> Mod<{mod}>>')
+
+        return ''
+
+    def _upd(self, c_name: str, sel: str, mod: str, hdr: Header.NGHeader) -> str:
+        _, conn, addr = self.__connectors__[c_name]
+        st = hdr.H_SES_TOK
+        self._log_as_client(addr, st, f'Received Command<ECC.upd; Sel<{sel}> Mod<{mod}>>')
+
+        return ''
 
     def _con_conn(self, c_name: str, hdr: Header.NGHeader, recv: bytes) -> None:
         thread, conn, addr = self.__connectors__[c_name]
 
         s, rx = self.sf_execute(self._get_tx, c_name, hdr, recv)
         assert s and isinstance(rx, Structs.Transmission), \
-            f'{Constants.RESPONSES.ERRORS.GENERAL} E001   Could not load Rx struct.'
+            f'{Constants.RESPONSES.ERRORS.GENERAL} E001   Could not load Rx struct. Recv<{hdr, recv}>'
 
         assert rx.hdr.MSGINTENT == 'C', f'{Constants.RESPONSES.ERRORS.BAD_HEADER} MSGINTENT'
 
@@ -253,7 +319,7 @@ class NGServer(__fc_server__):
         assert f'{rx.hdr.H_COM_CHK=}' in si["Attributes"], f'{Constants.RESPONSES.ERRORS.INCOMPATIBLE_VERSION} E-001B'
         assert rx.hdr.H_MC_TYPE == 1, f'{Constants.RESPONSES.ERRORS.BAD_TRANSMISSION} E-002 Send from client.'
 
-        fcom_exh = Header.HeaderUtils.load_exh(si['ComHistory'][si['fComID']][1])
+        fcom_exh = si['ComHistory'][si['fComID']][1]
         assert fcom_exh.EXH_MACHINE == rx.exh.EXH_MACHINE, f'{Constants.RESPONSES.ERRORS.BAD_REQUEST} E-003A'
         assert fcom_exh.EXH_PLATFORM == rx.exh.EXH_PLATFORM, f'{Constants.RESPONSES.ERRORS.BAD_REQUEST} E-003B'
         assert fcom_exh.EXH_MAC_ADDR == rx.exh.EXH_MAC_ADDR, f'{Constants.RESPONSES.ERRORS.BAD_REQUEST} E-003C'
@@ -263,8 +329,8 @@ class NGServer(__fc_server__):
 
         assert (sd := self.sf_execute(rsa.PrivateKey.load_pkcs1, si['C2SKey']['PrivatePEM'], 'PEM'))[0], f'{Constants.RESPONSES.ERRORS.GENERAL} E-006 (fatal)'
         _, priv_c2s_key = sd
-        print(priv_c2s_key)
-        print(rx.msg)
+        assert (sd := self.sf_execute(rsa.PublicKey.load_pkcs1, si['S2CKey']['PublicPEM'], 'PEM'))[0], f'{Constants.RESPONSES.ERRORS.GENERAL} E-006b (fatal)'
+        _, pub_s2c_key = sd
         assert (sd1 := self.sf_execute(Functions.BLOCK_DECRYPT_DATA, data=rx.msg, private_key=priv_c2s_key))[0], f'{Constants.RESPONSES.ERRORS.BAD_REQUEST} E-007'
         _, dec_msg = sd1
 
@@ -274,18 +340,25 @@ class NGServer(__fc_server__):
         if intent == '':
             intent = 'OTHER'
 
-        self.__sessions__[rx.hdr.H_SES_TOK]['ComHistory'][self.com_hist_key(rx.hdr.H_SES_TOK, rx.hdr.H_TX_TIME)] = (
-            Header._NGHeader.create_bytes(rx.hdr, ''),
-            rx.exh.to_bytes().decode(),
+        self.__sessions__[rx.hdr.H_SES_TOK]['ComHistory'][key := self.com_hist_key(rx.hdr.H_SES_TOK, rx.hdr.H_TX_TIME)] = (
+            rx.hdr,
+            rx.exh,
             rx.chk,
             rx.msg,
+            thread, addr, c_name,
             {
                 'intent': intent,
                 'dec_msg': dec_msg
             }
         )
 
-        assert False, f'{Constants.RESPONSES.ERRORS.GENERAL} Not Implemented'
+        rsp = self._handle_commands(c_name, intent, dec_msg[4::], rx.hdr) + '<end>'
+        rspe = Functions.BLOCK_ENCRYPT_DATA(rsp.encode(), pub_s2c_key)
+        tx_data = self._create_tx(rx.hdr.H_SES_TOK, rx.hdr.H_CLT_UID, rspe, sf_mode=True)
+        self._log_as_client(addr, rx.hdr.H_SES_TOK, f'{c_name=} Send<{rsp}>')
+        self.__sessions__[rx.hdr.H_SES_TOK]['ReplyHistory'][key] = (rsp, rspe, tx_data)
+
+        conn.send(tx_data)
 
     def _on_capture_event_(self, c_name: str) -> None | str:
         """

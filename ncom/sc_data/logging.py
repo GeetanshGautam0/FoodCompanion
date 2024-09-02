@@ -210,8 +210,8 @@ class Logger(Thread):
     def stop(self) -> None:
         try:
             self.task.cancel()
-        except:
-            pass
+        except Exception as E:
+            self.log(LoggingLevel.ERROR, 'AUTO-LOG', f'Failed to execute ST_TASK_1: {E.__class__.__name__}<{str(E)}>')
 
         self.__stopped = True
         buf, self.__buf__ = self.__buf__, []  # Empty self.__buf__ and copy contents to buf
