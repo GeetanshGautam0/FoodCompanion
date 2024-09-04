@@ -69,7 +69,7 @@ class ExtendedHeader:           # Only used by clients.
 
 @dataclass
 class Transmission:
-    hdr:    NGHeader | LegacyHeader
+    hdr:    NGHeader | LegacyHeader | None
     exh:    ExtendedHeader | None       # Servers do not send an EXH
     chk:    str                         # Message hash
     msg:    bytes

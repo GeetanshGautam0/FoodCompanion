@@ -8,7 +8,9 @@ except ImportError:
     from ..sc_db import *
 
 import sys, rsa, hashlib, uuid, json
+from datetime import datetime, timedelta
 from typing import cast, Tuple
+from threading import Timer
 
 
 class NGServer(__fc_server__):
@@ -19,11 +21,40 @@ class NGServer(__fc_server__):
         self.__pt_db__ = pt_db
         self.__u_db__ = user_db
 
+        self.__loops__ = []
+        (_l_task := Timer(10, self._check_r_loops)).start()
+        self._l_task = _l_task
+
+        self.__shutdown_tasks__.append(self._l_task.cancel)
+
         # __connectors__:   Dict[str, Tuple[__fc_thread__, socket.socket, Tuple[str, int]]]
         # __sessions__:     Dict[str, Dict[str, Any]]
 
         # Memoize the COM_CHK value for a faster response to the first message.
         _ = Header.HeaderUtils.get_com_chk()
+
+    def _check_r_loops(self) -> None:
+        if not self.__is_alive__:
+            return
+
+        self._l_task = Timer(10, self._check_r_loops)
+        now = datetime.now()
+
+        for i, (name, lp, start_time, brk) in enumerate(self.__loops__):
+            if lp > Settings.SETTINGS.LOOP_MAX_ITER and not brk:
+                self.__loops__[i][-1] = True  # Call for break.
+                self.log(LoggingLevel.ERROR, f'Loop "{name}" iterated too many times (> {Settings.SETTINGS.LOOP_MAX_ITER}).')
+
+            elif (now - start_time).total_seconds() >= (Settings.SETTINGS.LOOP_MAX_TIME_MIN * 60) and not brk:
+                self.__loops__[i][-1] = True  # Call for break.
+                self.log(LoggingLevel.ERROR, f'Loop "{name}" took too long (> {Settings.SETTINGS.LOOP_MAX_TIME_MIN * 60}s).')
+
+        self.log(LoggingLevel.INFO, f'_check_r_loop done; Start<{now}>')
+        self._l_task.start()
+
+    def register_loop(self, name: str) -> int:
+        self.__loops__.insert(index := len(self.__loops__), [name, 0, datetime.now(), False])
+        return index
 
     def run(self) -> None:
         self.bind()
@@ -230,15 +261,18 @@ class NGServer(__fc_server__):
         conn.send(tx_data)
 
     def com_hist_key(self, st: str, tx_time: int) -> str:
-        i = 0
-        while i <= 999_999:
+        lInd = self.register_loop('com_hist_key')
+        # Just go 'til Settings.SETTINGS.LOOP_MAX_ITER (managed by _check_r_loops)
+        while (i := self.__loops__[lInd][1]) >= 0 and not self.__loops__[lInd][-1]:
             s = str(i).rjust(6, '0')
             if (out := f'{tx_time}-{s}') not in self.__sessions__.get(st, {}).get('ComHistory', []):
+                self.__loops__[lInd][-1] = True
                 return out
 
-            i += 1
+            self.__loops__[lInd][1] += 1
 
-        raise Exception("Cannot log ComHistory")
+        self.__loops__[lInd][-1] = True
+        raise Exception("Cannot log ComHistory entry")
 
     def _handle_commands(self, c_name: str, intent: str, message: bytes, hdr: Header.NGHeader) -> str:
         try:
@@ -253,8 +287,35 @@ class NGServer(__fc_server__):
                     assert (selector := selector.strip().upper()) in ('P', 'F', 'U'), f'Selector<{selector}>'
                     assert (modifier := modifier.strip().upper()) in ('RCD', 'DET', 'LST', 'OMI', 'ACC', 'PSW'), f'Modifier<{modifier}>'
 
-                    assert (fnc := getattr(self, f'_{command.lower()}', None)) is not None, f'Command<{command}>'
-                    return cast(str, fnc(c_name, selector, modifier, hdr))
+                    # assert (fnc := getattr(self, f'_{command.lower()}', None)) is not None, f'Command<{command}>'
+                    # return cast(str, fnc(c_name, selector, modifier, hdr))
+
+                    ecc_map = {
+                        'NEW': {
+                            'P': {'RCD': 'PTR-2'},
+                            'F': {'RCD': 'FDR-1', 'OMI': 'FDR-3a', 'DET': 'FDR-4'},
+                            'U': {'RCD': 'URC-2a', 'ACC': 'URC-3P'},
+                        },
+                        'GET': {
+                            'P': {'RCD': 'PTR-1c', 'DET': 'PTR-1a', 'LST': 'PTR-1b'},
+                            'F': {'LST': 'FDR-5', 'OMI': 'FDR-5'},
+                            'U': {'RCD': 'URC-1a', 'LST': '1b'},
+                        },
+                        'UPD': {
+                            'P': {'DET': 'PTR-3a', 'RCD': 'PTR-3b'},
+                            'F': {'RCD': 'FDR-2'},
+                            'U': {'PSW': 'URC-4'},
+                        },
+                        'DEL': {
+                            'P': {'RCD': 'PTR-4'},
+                            'F': {'OMI': 'FDR-3b'},
+                            'U': {'RCD': 'URC-2b', 'ACC': 'URC-3R'},
+                        }
+                    }
+
+                    assert (form := ecc_map.get(command, {}).get(selector, {}).get(modifier)) is not None, \
+                        f'ECC.Command<{command}> ECC.Selector<{selector}> ECC.Modifier<{modifier}>'
+                    return form
 
                 case 'RFF':
                     pass
@@ -271,34 +332,6 @@ class NGServer(__fc_server__):
         except Exception as E:
             self.echo_traceback()
             assert False, f'{Constants.RESPONSES.ERRORS.GENERAL} Exception@_handler<{E.__class__.__name__}, {str(E)}>'
-
-    def _get(self, c_name: str, sel: str, mod: str, hdr: Header.NGHeader) -> str:
-        _, conn, addr = self.__connectors__[c_name]
-        st = hdr.H_SES_TOK
-        self._log_as_client(addr, st, f'Received Command<ECC.get; Sel<{sel}> Mod<{mod}>>')
-
-        return ''
-
-    def _new(self, c_name: str, sel: str, mod: str, hdr: Header.NGHeader) -> str:
-        _, conn, addr = self.__connectors__[c_name]
-        st = hdr.H_SES_TOK
-        self._log_as_client(addr, st, f'Received Command<ECC.new; Sel<{sel}> Mod<{mod}>>')
-
-        return ''
-
-    def _del(self, c_name: str, sel: str, mod: str, hdr: Header.NGHeader) -> str:
-        _, conn, addr = self.__connectors__[c_name]
-        st = hdr.H_SES_TOK
-        self._log_as_client(addr, st, f'Received Command<ECC.del; Sel<{sel}> Mod<{mod}>>')
-
-        return ''
-
-    def _upd(self, c_name: str, sel: str, mod: str, hdr: Header.NGHeader) -> str:
-        _, conn, addr = self.__connectors__[c_name]
-        st = hdr.H_SES_TOK
-        self._log_as_client(addr, st, f'Received Command<ECC.upd; Sel<{sel}> Mod<{mod}>>')
-
-        return ''
 
     def _con_conn(self, c_name: str, hdr: Header.NGHeader, recv: bytes) -> None:
         thread, conn, addr = self.__connectors__[c_name]
@@ -352,7 +385,7 @@ class NGServer(__fc_server__):
             }
         )
 
-        rsp = self._handle_commands(c_name, intent, dec_msg[4::], rx.hdr) + '<end>'
+        rsp = "" + self._handle_commands(c_name, intent, dec_msg[4::], rx.hdr)
         rspe = Functions.BLOCK_ENCRYPT_DATA(rsp.encode(), pub_s2c_key)
         tx_data = self._create_tx(rx.hdr.H_SES_TOK, rx.hdr.H_CLT_UID, rspe, sf_mode=True)
         self._log_as_client(addr, rx.hdr.H_SES_TOK, f'{c_name=} Send<{rsp}>')

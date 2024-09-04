@@ -18,6 +18,10 @@ class Settings(Constants):
     LG_LOG_INFO:                        bool
     LG_LOG_DEBUG:                       bool
 
+    # Loop Settings
+    LOOP_MAX_TIME_MIN:                  float
+    LOOP_MAX_ITER:                      int
+
 
 SETTINGS = Settings(
     SRVC_CLT_PROMPT_IP=APPINFO.SRVC_CLT_PROMPT_IP,
@@ -29,5 +33,7 @@ SETTINGS = Settings(
     LG_LOG_WARN=APPINFO.LG_LOG_WARN,
     LG_LOG_INFO=APPINFO.LG_LOG_INFO,
     LG_LOG_DEBUG=APPINFO.LG_LOG_DEBUG,
+    LOOP_MAX_TIME_MIN=APPINFO.LOOP_MAX_TIME_MIN,
+    LOOP_MAX_ITER=APPINFO.LOOP_MAX_ITER
 )
 
