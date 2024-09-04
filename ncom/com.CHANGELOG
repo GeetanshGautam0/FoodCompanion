@@ -57,6 +57,22 @@ Bugfix:
 Bugfix:
 * Added a missing `i += 1` line in `_con_conn` which had previously led to a frozen server upon the second request.
 
+09/03/2024
+* Ability to filter out forms from client ECC requests.
+* Added a shutdown tasks "plugin" for servers.
+* Added MAX_LOOP_ITER and MAX_LOOP_TIME settings/config to ncom.config
+    - Implemented in NG server; will not be implemented in LEGACY server.
+    - Need to "register" a loop to add protections.
+    - Protects from cases that stall an application.
+    - Reconfigured ng.com_hist_key to be a "protected" loop.
+* Modified code in `client.py` to only send 1 request. Old code left but commented-out for testing.
+* Added ClientUtils.verify to check transmissions and decypher messages.
+    - Bugfix: added protections to ClientUtils.parse and ClientUtils.verify to make sure that messages w/ no header (usually errors) do not cause problems.
+* Added debug information to EXT_HEADER loader.
+* Removed the '<end>' string appended to messages sent by `ng._con_conn`.
+* Changed Structs.Transmission to accommodate `NoneType` headers.
+
+
 
 TODO:
 * Add a system to check that repeat commands are not issued w/ the same TX time (to make sure that transmissions cannot be cloned)

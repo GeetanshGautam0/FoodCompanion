@@ -1,4 +1,4 @@
-import rsa, socket
+import rsa, socket, hashlib
 from std_imports import *
 
 
@@ -146,7 +146,11 @@ class ClientUtil:
         return s
 
     def parse(self, recv: bytes) -> Structs.Transmission:
-        assert len(recv) >= Header.NGHeaderItems.header_length()
+        if not self._detect_header(recv):
+            return Structs.Transmission(None, None, '', recv)
+
+        assert isinstance(recv, bytes), type(recv)
+        assert len(recv) >= Header.NGHeaderItems.header_length(), len(recv)
         rx_hdr = recv[:Header.NGHeaderItems.header_length():]
 
         hdr = Header.HeaderUtils.load_ng_header(rx_hdr)
@@ -173,8 +177,30 @@ class ClientUtil:
         else:
             exh = Header.HeaderUtils.load_exh(tx_sections[0])
 
+        tx_sections = [*tx_sections[:-2:], *[s if s is not None else b'' for s in tx_sections[-2::]]]
         tx_sections[-2] = tx_sections[-2].decode()
+
         return Structs.Transmission(hdr, exh, *tx_sections[-2::])
+
+    def _v(self, rx: Structs.Transmission) -> bytes:
+        if rx.hdr is None:
+            return rx.msg
+
+        assert rx.exh is None,                                          'E000'  # The server never sends an EXH
+        assert rx.hdr.EXT_HDR_L == 0,                                   'E000b'
+        assert hashlib.sha256(rx.msg).hexdigest() == rx.chk,            'E001'
+        assert (pr := self.__keys__.get('S2CPriv')) is not None,        'E002'
+        assert (msg := self.sf_execute(Functions.BLOCK_DECRYPT_DATA, rx.msg, pr))[0], 'E003'
+        assert rx.hdr.H_SES_TOK == self.__c_data__.get('ST'),           'E004'
+        assert rx.hdr.H_CLT_UID == self.__c_data__.get('CUID'),         'E005'
+        assert rx.hdr.MSGINTENT == 'C',                                 'E006'
+        assert rx.hdr.H_MC_TYPE == 0,                                   'E007'
+
+        msg = cast(bytes, msg[1]).strip()
+        return msg
+
+    def verify(self, rx: Structs.Transmission) -> Tuple[bool, bytes]:
+        return self.sf_execute(self._v, rx)
 
     def close_socket(self) -> None:
         self.sf_execute(self.sock.close)

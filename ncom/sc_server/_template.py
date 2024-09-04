@@ -59,6 +59,8 @@ class __fc_server__:
         self.__cost_timer__ = AppInfo.APPINFO.COST_TIMER
         self.__attr__ = ()
 
+        self.__shutdown_tasks__ = []
+
         self._on_init()
 
     @property
@@ -84,6 +86,13 @@ class __fc_server__:
         self.sf_execute(self.__cost_task__.cancel)
         self.sf_execute(self._close_all_sockets)
         self.sf_execute(self._shutdown)
+
+        for task in self.__shutdown_tasks__:
+            self.logger.log(
+                LoggingLevel.INFO,
+                'TemplateServer',
+                f'PLUGINS.EXIT; SFTask<{task}> -> {self.sf_execute(task)}'
+            )
 
     def _close_all_sockets(self) -> None:
         for c_name, (thread, conn, addr) in self.__connectors__.items():

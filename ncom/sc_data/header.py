@@ -214,10 +214,16 @@ class _NGHeader:
         exh_delim = b'<EXH_DELIM>'
         exh_null = b'<EXH_NO_DATA>'
 
-        return ExtendedHeader(*[
+        args = [
             d.decode() if d != exh_null else None
             for d in __bytes.split(exh_delim)
-        ])
+        ]
+
+        try:
+            return ExtendedHeader(*args)
+        except Exception as E:
+            print(args)
+            raise E
 
     @staticmethod
     def create_bytes(__ngh: NGHeader, __hash: str) -> bytes:

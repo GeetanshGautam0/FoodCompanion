@@ -21,6 +21,9 @@ class AppInfo(Constants):
     LG_LOG_INFO: bool
     LG_LOG_DEBUG: bool
 
+    LOOP_MAX_TIME_MIN: float
+    LOOP_MAX_ITER:     int
+
     # Additional Items
     APP_DATA_PATH:              str
 
