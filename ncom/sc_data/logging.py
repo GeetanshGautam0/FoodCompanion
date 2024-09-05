@@ -291,11 +291,17 @@ class LogParser:
         self.__f_desc__ = (log_file, hf)
         self.__bc__ = BlockChain(self.__f_desc__[0], self.__f_desc__[1], '')
 
-    def get_logs(self) -> List[Tuple[Any, ...]]:
+    def get_logs(self, print_progress: bool = False) -> List[Tuple[Any, ...]]:
+        if print_progress:
+            print('Tokenizing logs. Please be patient as this can take a long time.')
+
         self.__bc__.parse_entries()
 
         if not len(self.__bc__.__bc__):
             return []
+
+        if print_progress:
+            print('Validating logs and checking for tampering. Please be patient as this can take a long time.')
 
         self.__bc__.validate()
         parsed = self.__bc__.__bc__
@@ -308,6 +314,9 @@ class LogParser:
             in_s = False
 
             for i, c in enumerate(l):
+                if print_progress and not ((i + 1) % 10):  # every 10 lines
+                    print(f'Parsing log {i + 1}/{len(l)} (STEP 1/2; {(i + 1) / len(l) * 100}%)')
+
                 if not in_s and c == '[':
                     assert s_start_ctr < 2
 

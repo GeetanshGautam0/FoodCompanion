@@ -9,8 +9,97 @@ except ImportError:
 
 import sys, rsa, hashlib, uuid, json
 from datetime import datetime, timedelta
-from typing import cast, Tuple
+from typing import cast, Tuple, List, Set
 from threading import Timer
+
+
+class Forms:
+    class FormItems:
+        pid = ('pid', 'PatientID', Structs.PatientID)
+        iid = ('iid', 'InstitutionID', Structs.InstitutionID)
+        dob = ('dob', 'DateOfBirth', Structs.FormattedDate)
+
+        name = ('name', 'Name', Structs.FormattedName)
+        bld = ('bld', 'BLD', str)
+        cat = ('cat', 'FoodCategory', int)
+        cal = ('cal', 'Calories', float)
+        cst = ('cst', 'Starches', float)
+        csu = ('csu', 'Sugars', float)
+        cfi = ('cfi', 'Fiber', float)
+        ftr = ('ftr', 'Trans Fat', float)
+        fsa = ('fsa', 'Saturated Fat', float)
+        pco = ('pco', 'Complete Protein Source', bool)
+        pro = ('pro', 'Protein', float)
+        ssc = ('ssc', 'Serving Size Count', float)
+        ssu = ('ssu', 'Serving Size Unit', int)
+        odiets = ('odiets', 'OmittedDietOrders', List[int])
+        id = ('id', 'ID', int)
+        diet = ('diet', 'DietOrder', int)
+        pname = ('pname', 'PatientName', Structs.FormattedName)
+        field = ('field', 'FieldName', str)
+        value = ('value', 'Value', str)
+        userID = ('userID', 'UserID', int)
+        userAC = ('userAC', 'User Access Code', str)
+        txTime = ('txTime', 'Transmission Time', int)
+        nUserAC = ('nUserAC', 'UAC2', str)
+        nUserID = ('nUserID', 'UID2', int)
+        access = ('access', 'AccessLevels', str)
+        newAC = ('newAC', 'NewAC', str)
+
+    __std_auth = [FormItems.iid, FormItems.userID, FormItems.userAC, FormItems.txTime]
+    __last_upd = 20240903194700
+
+    ptr_1a = {FormItems.pid, FormItems.iid, FormItems.dob}
+    ptr_1b = {*__std_auth}
+    ptr_1c = {FormItems.pid, FormItems.iid, FormItems.dob, *__std_auth}
+    ptr_2  = {FormItems.pid, FormItems.iid, FormItems.dob, FormItems.pname, FormItems.diet, *__std_auth}
+    ptr_3a = {FormItems.pid, FormItems.iid, FormItems.dob, FormItems.diet, *__std_auth}
+    ptr_3b = {FormItems.pid, FormItems.iid, FormItems.dob, FormItems.field, FormItems.value, *__std_auth}
+    ptr_4  = {FormItems.pid, FormItems.iid, FormItems.dob, *__std_auth}
+
+    fdr_1  = {
+        FormItems.name, FormItems.bld, FormItems.cat, FormItems.cal, FormItems.cst, FormItems.csu, FormItems.cfi,
+        FormItems.ftr, FormItems.fsa, FormItems.pco, FormItems.pro, FormItems.ssc, FormItems.ssu, FormItems.odiets,
+        *__std_auth
+    }
+    fdr_2  = {FormItems.field, FormItems.value, *__std_auth}
+    fdr_3a = {FormItems.id, FormItems.diet, *__std_auth}
+    fdr_3b = {FormItems.id, FormItems.diet, *__std_auth}
+    fdr_4  = {FormItems.name, *__std_auth}
+    fdr_5  = {FormItems.iid}
+
+    urc_1a = {*__std_auth, FormItems.nUserID}
+    urc_1b = {*__std_auth}
+    urc_2a = {*__std_auth, FormItems.nUserID, FormItems.nUserAC, FormItems.access}
+    urc_2b = {*__std_auth, FormItems.nUserID, FormItems.nUserAC}
+    urc_3p = {*__std_auth, FormItems.nUserID, FormItems.access}
+    urc_3r = {*__std_auth, FormItems.nUserID, FormItems.access}
+    urc_4  = {*__std_auth, FormItems.nUserID, FormItems.nUserAC, FormItems.newAC}
+
+    @staticmethod
+    def last_upd() -> int:
+        return Forms.__last_upd
+
+    @staticmethod
+    def get_form_items(form_name: str) -> Set[FormItems]:
+        return cast(
+            Set[Forms.FormItems],
+            {*(getattr(Forms, form_name.replace('-', '_').lower(), []))}
+        )
+
+    @staticmethod
+    def get_form_str(form_name: str, certificate: str) -> str:
+        items = Forms.get_form_items(form_name)
+        assert len(items), f'Could not get form items for "{form_name}"'
+
+        fmt = '%s<{form_items}> >> {cert} >> {fud}' % form_name.ljust(6, ' ')
+        items = '.'.join([f'[&{item};]' for (item, *_) in items])
+
+        return fmt.format(**{
+            'form_items':   items,
+            'fud':          Forms.__last_upd,
+            'cert':         certificate
+        })
 
 
 class NGServer(__fc_server__):
@@ -255,6 +344,10 @@ class NGServer(__fc_server__):
                     'mode_NG',
                     f'{rx.hdr.H_COM_CHK=}',
                 ],
+            'Forms':
+                [],
+            'SecAccess':
+                [],
             'fComID': f_com_id
         }
 
@@ -275,53 +368,18 @@ class NGServer(__fc_server__):
         raise Exception("Cannot log ComHistory entry")
 
     def _handle_commands(self, c_name: str, intent: str, message: bytes, hdr: Header.NGHeader) -> str:
+        self.log(LoggingLevel.INFO, f'Handling command {message} w/ {intent=}')
+
         try:
             match intent:
                 case 'ECC':
-                    assert message.count(b'-') == 2
-                    assert (sfs := self.sf_execute(message.decode))[0], 'CODEC_ERROR'
-                    _, message = cast(Tuple[bool, str], sfs)
-
-                    command, selector, modifier = message.split('-')
-                    assert (command := command.strip().upper()) in ('GET', 'NEW', 'UPD', 'DEL'), f'Command<{command}>'
-                    assert (selector := selector.strip().upper()) in ('P', 'F', 'U'), f'Selector<{selector}>'
-                    assert (modifier := modifier.strip().upper()) in ('RCD', 'DET', 'LST', 'OMI', 'ACC', 'PSW'), f'Modifier<{modifier}>'
-
-                    # assert (fnc := getattr(self, f'_{command.lower()}', None)) is not None, f'Command<{command}>'
-                    # return cast(str, fnc(c_name, selector, modifier, hdr))
-
-                    ecc_map = {
-                        'NEW': {
-                            'P': {'RCD': 'PTR-2'},
-                            'F': {'RCD': 'FDR-1', 'OMI': 'FDR-3a', 'DET': 'FDR-4'},
-                            'U': {'RCD': 'URC-2a', 'ACC': 'URC-3P'},
-                        },
-                        'GET': {
-                            'P': {'RCD': 'PTR-1c', 'DET': 'PTR-1a', 'LST': 'PTR-1b'},
-                            'F': {'LST': 'FDR-5', 'OMI': 'FDR-5'},
-                            'U': {'RCD': 'URC-1a', 'LST': '1b'},
-                        },
-                        'UPD': {
-                            'P': {'DET': 'PTR-3a', 'RCD': 'PTR-3b'},
-                            'F': {'RCD': 'FDR-2'},
-                            'U': {'PSW': 'URC-4'},
-                        },
-                        'DEL': {
-                            'P': {'RCD': 'PTR-4'},
-                            'F': {'OMI': 'FDR-3b'},
-                            'U': {'RCD': 'URC-2b', 'ACC': 'URC-3R'},
-                        }
-                    }
-
-                    assert (form := ecc_map.get(command, {}).get(selector, {}).get(modifier)) is not None, \
-                        f'ECC.Command<{command}> ECC.Selector<{selector}> ECC.Modifier<{modifier}>'
-                    return form
+                    return self._manage_ecc(c_name, message, hdr)
 
                 case 'RFF':
-                    pass
+                    return self._manage_form_reply(c_name, message, hdr)
 
                 case 'OTHER':
-                    pass
+                    raise Exception('NotImplemented')
 
                 case _:
                     assert False, f'Intent<{intent}>'
@@ -332,6 +390,95 @@ class NGServer(__fc_server__):
         except Exception as E:
             self.echo_traceback()
             assert False, f'{Constants.RESPONSES.ERRORS.GENERAL} Exception@_handler<{E.__class__.__name__}, {str(E)}>'
+
+    def _generate_ecc_cert(self, form: str, client_uid: str) -> str:
+        # TODO: replace w/ a cryptographic certificate, eventually.
+        # temporarily: MD5(client-uid) + expiration
+
+        base = hashlib.md5(form.encode() + client_uid.encode()).hexdigest()
+        expiration = (datetime.now() + timedelta(days=2)).strftime(Constants.FRMT.DATETIME)  # you have 2 days to respond.
+
+        return base + expiration
+
+    def _manage_ecc(self, c_name: str, message: bytes, hdr: Header.NGHeader) -> str:
+        assert message.count(b'-') == 2, 'FORMAT_ECC_COMMAND'
+        assert (sfs := self.sf_execute(message.decode))[0], 'CODEC_ERROR'
+        _, message = cast(Tuple[bool, str], sfs)
+
+        command, selector, modifier = message.split('-')
+        assert (command := command.strip().upper()) in ('GET', 'NEW', 'UPD', 'DEL'), f'Command<{command}>'
+        assert (selector := selector.strip().upper()) in ('P', 'F', 'U'), f'Selector<{selector}>'
+        assert (modifier := modifier.strip().upper()) in (
+        'RCD', 'DET', 'LST', 'OMI', 'ACC', 'PSW'), f'Modifier<{modifier}>'
+
+        # assert (fnc := getattr(self, f'_{command.lower()}', None)) is not None, f'Command<{command}>'
+        # return cast(str, fnc(c_name, selector, modifier, hdr))
+
+        ecc_map = {
+            'NEW': {
+                'P': {'RCD': 'PTR-2'},
+                'F': {'RCD': 'FDR-1', 'OMI': 'FDR-3a', 'DET': 'FDR-4'},
+                'U': {'RCD': 'URC-2a', 'ACC': 'URC-3P'},
+            },
+            'GET': {
+                'P': {'RCD': 'PTR-1c', 'DET': 'PTR-1a', 'LST': 'PTR-1b'},
+                'F': {'LST': 'FDR-5', 'DET': 'FDR-5'},
+                'U': {'RCD': 'URC-1a', 'LST': 'URC-1b'},
+            },
+            'UPD': {
+                'P': {'DET': 'PTR-3a', 'RCD': 'PTR-3b'},
+                'F': {'RCD': 'FDR-2'},
+                'U': {'PSW': 'URC-4'},
+            },
+            'DEL': {
+                'P': {'RCD': 'PTR-4'},
+                'F': {'OMI': 'FDR-3b'},
+                'U': {'RCD': 'URC-2b', 'ACC': 'URC-3R'},
+            }
+        }
+
+        assert (form := ecc_map.get(command, {}).get(selector, {}).get(modifier)) is not None, \
+            f'ECC.Command<{command}> ECC.Selector<{selector}> ECC.Modifier<{modifier}>'
+        self.__sessions__[hdr.H_SES_TOK]['Forms'] = [
+            *self.__sessions__[hdr.H_SES_TOK].get('Forms', []),
+            (form, cert := self._generate_ecc_cert(hdr.H_CLT_UID, form))
+        ]
+
+        return Forms.get_form_str(form, cert)
+
+    def _manage_form_reply(self, c_name: str, msg: bytes, hdr: Header.NGHeader) -> str:
+        vsl = len(vs := str(Forms.last_upd()))
+        msg = msg.strip()
+
+        assert msg.count(fDelim := b'>>') == 2, 'E000 fSect<3>'
+        fsect = msg.split(fDelim)
+        fsect = [s.strip() for s in fsect][-3::]
+        assert not sum(e := [1 if not len(s) else 0 for s in fsect]), f'E001 fFill {e}'
+        body, cert, fud = fsect
+
+        assert len(body) > 6, f'E002a fIDL'
+        assert body.endswith(b'>'), f'E002a-2 fID-E'
+        assert len(cert) == (32 + Constants.SZ.DATETIME), f'E002b fCertL'
+        assert len(fud) == vsl, f'E002c fFUDL'
+        assert fud.decode() == vs, f'E002c-2 fFUDc'
+
+        form_id = body[:6].strip().decode()
+        forms_sent = self.__sessions__[hdr.H_SES_TOK].get('Forms', [])
+        t = ()
+
+        self.log(LoggingLevel.INFO, f'RFF-CHECK: Comparing against {forms_sent=}')
+        assert len(forms_sent), 'E003-0 CERTIFICATE_ERROR'
+        for form_sent, cert_sent in forms_sent:
+            if (form_sent == form_id) and (cert_sent == cert.decode()):
+                t = (form_sent, cert_sent)
+
+        assert len(t) == 2, ' E003-2 CERTIFICATE_ERROR'
+        # assert (t := (form_id, e_cert)) in self.__sessions__[hdr.H_SES_TOK].get('Forms', []), 'E003-2 CERTIFICATE_ERROR'
+
+        self.log(LoggingLevel.INFO, f'RFF-CHECK: Successfully verified RFF req w/ {form_id=} cert={t[-1]}')
+        self.__sessions__[hdr.H_SES_TOK]['Forms'].pop(self.__sessions__[hdr.H_SES_TOK]['Forms'].index(t))
+
+        return 'NotImplemented'
 
     def _con_conn(self, c_name: str, hdr: Header.NGHeader, recv: bytes) -> None:
         thread, conn, addr = self.__connectors__[c_name]
