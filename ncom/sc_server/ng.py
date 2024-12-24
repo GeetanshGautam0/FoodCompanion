@@ -264,8 +264,6 @@ class NGServer(__fc_server__):
         return hdr + exh + chk.encode() + message_body
 
     def _new_conn(self, c_name: str, hdr: Header.NGHeader, recv: bytes) -> None:
-        # TODO: Log transmissions.
-
         thread, conn, addr = self.__connectors__[c_name]
 
         s, rx = self.sf_execute(self._get_tx, c_name, hdr, recv)
@@ -292,6 +290,8 @@ class NGServer(__fc_server__):
         assert m_hsh == rx.chk, f'{Constants.RESPONSES.ERRORS.BAD_TRANSMISSION} E006-B {m_hsh}'
 
         assert rx.msg.startswith(b'<EstCon>'), f'{Constants.RESPONSES.ERRORS.BAD_REQUEST} E007   <EstCon>'
+
+        self.on_msg_capt(addr, rx.hdr.H_SES_TOK, rx.msg)
 
         rsa_pub_key_pem = rx.msg.lstrip(b'<EstCon>')
         vKey, S2CPubKey = self.sf_execute(
@@ -514,6 +514,7 @@ class NGServer(__fc_server__):
         assert (sd1 := self.sf_execute(Functions.BLOCK_DECRYPT_DATA, data=rx.msg, private_key=priv_c2s_key))[0], f'{Constants.RESPONSES.ERRORS.BAD_REQUEST} E-007'
         _, dec_msg = sd1
 
+        self.on_msg_capt(addr, rx.hdr.H_SES_TOK, dec_msg)
         assert len(dec_msg) >= 4, f'{Constants.RESPONSES.ERRORS.BAD_REQUEST} E-005A'
         assert (intent := dec_msg[:4].strip().decode()) in ('ECC', 'RFF', ''), f'{Constants.RESPONSES.ERRORS.BAD_REQUEST} E-005B {intent=}'
 

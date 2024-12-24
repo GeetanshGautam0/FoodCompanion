@@ -57,6 +57,7 @@ def _rsa_block_encrypt(message: bytes, pubKey: rsa.PublicKey) -> bytes:
 
     if (rem := len(message) % block_size) > 0:
         STDOUT(f"Rem<{rem}>", "RSAUtil @ _rsa_block_encrypt")
+        # sect = message[-1 * rem::]
         sect = message[blocks * block_size:(blocks * block_size) + rem]
         sections.append(rsa.encrypt(sect, pubKey))
 
@@ -97,3 +98,22 @@ DECRYPT_DATA = lambda data, private_key: rsa.decrypt(data, private_key)
 
 BLOCK_ENCRYPT_DATA = lambda data, public_key: _rsa_block_encrypt(GET_BYTES(data), public_key)
 BLOCK_DECRYPT_DATA = lambda data, private_key: _rsa_block_decrypt(data, private_key)
+
+
+def STRING_WITH_LINE_NUMBERS(s: str | bytes, prepend: str = '', ret_if: Tuple[int] = (0, 1)) -> str:
+    if isinstance(s, bytes):
+        lines = s.decode().split('\n')
+    else:
+        lines = s.split('\n')
+
+    if len(lines) in ret_if:
+        return s
+
+    ln_s = len(str(len(lines)))
+
+    return '\n'.join(
+        [
+            "%s%d%s | %s" % (prepend, line_number + 1, ' ' * (ln_s - len(str(line_number + 1))), line)
+            for line_number, line in enumerate(lines)
+        ]
+    )

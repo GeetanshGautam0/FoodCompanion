@@ -15,6 +15,7 @@ class AppInfo(Constants):
     SRVC_TCP_SELECT_TIMEOUT:    int
     COST_TIMER:                 float
 
+    LOG_TRANSMISSIONS: bool
     LG_INTERVAL: int
     LG_LOG_ERROR: bool
     LG_LOG_WARN: bool
