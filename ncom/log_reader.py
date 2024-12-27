@@ -12,7 +12,7 @@ lines = []
 
 RED = lambda i, t: l0 if (l0 := len(str(t))) > (l1 := lengths[i]) else l1
 
-for i, (t, l, s, d) in enumerate(logs):
+for i, (l, s, t, d) in enumerate(logs):
     if not ((i + 1) % 10):  # every 10 lines
         print(f'Processing log {i+1}/{len(logs)} (STEP 1/2; {(i+1)/len(logs) * 100}%)')
 
@@ -34,6 +34,8 @@ const = '%s%s%s%s\n' % (
 for i, (t, l, s, d) in enumerate(lines):
     if not ((i + 1) % 10):  # every 10 lines
         print(f'Constructing logfile {i+1}/{len(logs)} (STEP 2/2; {(i+1)/len(logs) * 100}%)')
+
+    print(lines)
 
     const += str(t).ljust(lengths[0] + 1)
     const += str(l).ljust(lengths[1] + 1)

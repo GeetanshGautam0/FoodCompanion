@@ -11,6 +11,7 @@ _s_data = ServerData(
     shutdown_tasks=[]
 )
 
+
 # Default admin user.
 admin_user = Structs.UserRecord(
     Structs.InstitutionID("FC"),
@@ -24,17 +25,25 @@ admin_user = Structs.UserRecord(
 _s_data.user_database.check_admin_user(admin_user)
 
 
+def execute_shutdown_tasks() -> None:
+    global _s_data
+
+    for i, task in enumerate(_s_data.shutdown_tasks):
+        try:
+            task()
+            _s_data.logger.log(LoggingLevel.INFO, 'CLI', f"Executed Task#{i + 1} <{task}>")
+        except Exception as E:
+            _s_data.logger.log(LoggingLevel.WARN, 'CLI', f"Skipped Task#{i + 1} <{E.__class__.__name__}: {str(E)}>")
+
+
 def eh(tp, *args) -> None:
     global _s_data
 
     if tp == KeyboardInterrupt:
-        for i, f in enumerate(_s_data.shutdown_tasks):
-            s, d = sf_execute(_s_data.logger, f)
-            if not s:
-                _s_data.logger.log(LoggingLevel.WARN, 'GEH', f"Skipped Task#{i + 1} <{d.__class__.__name__}: {str(d)}>")
-
+        execute_shutdown_tasks()
         sys.exit('KB-INT')
-    sys.__excepthook__(tp, *args)
+
+    sys.__excepthook__(tp, *args)  # Note: this will be captured automatically by the error manager.
 
 
 sys.excepthook = eh
@@ -47,7 +56,7 @@ ns = NGServer(Constants.TCP.SIP, _s_data.patient_database, _s_data.user_database
 
 _s_data.shutdown_tasks.extend([
     ls.request_shutdown, ns.request_shutdown,
-    t0.join, t1.join,
+    lambda: t0.join(0), lambda: t1.join(0),
     _s_data.logger.stop
 ])
 
@@ -106,12 +115,14 @@ class CLI:
     @staticmethod
     def new_user() -> None:
         global _logger, _s_data
-        CreateUserRecord(logger=_logger, user_db=_s_data.user_database)
+        (new_thread := Thread(target=CreateUserRecord, args=(_logger, _s_data.user_database))).start()
+        _s_data.shutdown_tasks.insert(-2, lambda: new_thread.join(0))
 
     @staticmethod
     def list_user() -> None:
         global _logger, _s_data
-        ListUserRecords(logger=_logger, user_db=_s_data.user_database)
+        (new_thread := Thread(target=ListUserRecords, args=(_logger, _s_data.user_database))).start()
+        _s_data.shutdown_tasks.insert(-2, lambda: new_thread.join(0))
 
     commands = {
         'STOP':         ('Shutdown server and quit.', ls.__s_thread__.done),
@@ -139,11 +150,5 @@ while (((not ls.__s_thread__.is_done) or (not ns.__s_thread__.is_done))
         sf_execute(_s_data.logger, CLI.commands[inp][-1], sfe_echo_tb=True)
 
 else:
-    for i, task in enumerate(_s_data.shutdown_tasks):
-        try:
-            task()
-            _s_data.logger.log(LoggingLevel.INFO, 'CLI', f"Executed Task#{i + 1} <{task}>")
-        except Exception as E:
-            _s_data.logger.log(LoggingLevel.WARN, 'CLI', f"Skipped Task#{i + 1} <{E.__class__.__name__}: {str(E)}>")
-
+    execute_shutdown_tasks()
     sys.exit("CMD-STOP")

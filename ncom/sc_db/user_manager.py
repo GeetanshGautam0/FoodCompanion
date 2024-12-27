@@ -17,7 +17,7 @@ from prettytable import PrettyTable
 MINIMUM_USER_ID_VALUE = 100_000_000
 
 
-class __terminal__(Thread):
+class __terminal__:
     def __init__(
             self,
             logger: Logger,
@@ -26,7 +26,7 @@ class __terminal__(Thread):
             *_,
             **__
     ) -> None:
-        super(__terminal__, self).__init__()
+        # super(__terminal__, self).__init__()
 
         self.logger = logger
         self.smd, self.msgs = SharedMemoryDict(*smd), messages
@@ -34,6 +34,8 @@ class __terminal__(Thread):
         self.root = tk.Tk()
 
         self.data = {}
+        self.data_avail = tk.StringVar(self.root)
+        self.data_avail.set('')
         self.entry_string = tk.StringVar(self.root)
 
         self.text = tk.Listbox(self.root)
@@ -52,7 +54,10 @@ class __terminal__(Thread):
         self.sp = ()
         self._check_ws()
 
-        self.start()
+        self.index = 0
+
+        # self.start()
+        self.run()
         self.root.mainloop()
 
     def _check_ws(self) -> None:
@@ -68,15 +73,22 @@ class __terminal__(Thread):
         )
 
     @staticmethod
-    def sf_execute(fct: Callable[[Any], Any], *args, **kwargs) -> None:
+    def sf_execute(fct: Callable[[Any], Any], *args, **kwargs) -> Any:
         try:
-            fct(*args, **kwargs)
-        except Exception as _:
-            pass
+            return fct(*args, **kwargs)
+        except Exception as E:
+            return f'{E.__class__.__name__}({str(E)})'
 
     def close(self) -> None:
-        self.root.after(0, lambda: __terminal__.sf_execute(self.root.destroy))
-        __terminal__.sf_execute(self.join, 0)
+        self.root.after(
+            0,
+            lambda: self.logger.log(
+                LoggingLevel.INFO,
+                'UserManager.Terminal.Close',
+                str(__terminal__.sf_execute(self.root.destroy))
+            )
+        )
+        # __terminal__.sf_execute(self.join, 0)
 
     def _man_upd(self):
         self.root.update()
@@ -93,7 +105,8 @@ class __terminal__(Thread):
         self.input_desc.pack(fill=tk.X, expand=False, padx=20, pady=(5, 0))
         self.entry.pack(fill=tk.X, expand=False, padx=20, pady=(2, 10))
 
-        self.data['_inp_'] = False
+        # self.data['_inp_'] = False
+        self.data_avail.set('')
         self.entry_string.set('')
         self.entry.bind('<Return>', self._on_entry_enter)
 
@@ -115,12 +128,14 @@ class __terminal__(Thread):
         self.execute()
 
     def execute(self) -> None:
-        for (message_or_desc, smd_key) in self.msgs:
-            if isinstance(smd_key, str):  # This is a prompt
-                inp = self.prompt(message_or_desc)   # desc
-                self.smd[smd_key] = inp
-            else:  # This is a message
-                self.add_message(message_or_desc)  # msg
+        for i in range(self.index, len(self.msgs)):
+            self.index = i
+            if isinstance((msg_or_prompt := self.msgs[self.index])[1], str):
+                # Is a prompt
+                self.prompt(msg_or_prompt[0])
+                return  # Execute to be called again later
+            else:
+                self.add_message(msg_or_prompt[0])
 
         self.close()
 
@@ -148,24 +163,16 @@ class __terminal__(Thread):
         self.input_frame.pack_forget()
 
     def _on_entry_enter(self, *args, **kwargs) -> None:
-        self.data['_inp_'] = True
+        # self.data['_inp_'] = True
         self.hide_entry()
+        self.smd[self.msgs[self.index][1]] = self.entry_string.get().strip()  # Save the data.
+        self.entry_string.set('')
+        self.index += 1
+        self.execute()
 
-    def prompt(self, desc: str) -> str:
-        def _wait_for_input() -> None:
-            while not self.data.get('_inp_', False):
-                pass
-
+    def prompt(self, desc: str) -> None:
         self.input_desc.config(text=desc)
         self.disp_entry()
-        _wait_for_input()
-
-        s = self.entry_string.get().strip()  # Save space in the SMD, yk?
-        self.data['_inp_'] = False
-        self.entry_string.set('')
-        self.hide_entry()
-
-        return s
 
 
 def CreateUserRecord(logger: Logger, user_db: UserDatabase) -> None:
@@ -196,8 +203,13 @@ def CreateUserRecord(logger: Logger, user_db: UserDatabase) -> None:
 
     smd = SharedMemoryDict(*smd)
     # Hash password and remove from SMD, for security
-    hpsw = hashlib.sha256(smd.get('psw', '').encode()).hexdigest()
-    smd['psw'] = None
+    try:
+        hpsw = hashlib.sha256(smd.get('psw', '').encode()).hexdigest()
+        smd['psw'] = None
+    except Exception as _:
+        smd['psw'] = None
+        logger.log(LoggingLevel.ERROR, sc, 'User not found (-1).')
+        return
 
     g, iuid = Functions.TRY(int, smd.get('uid', -1))
     if not g:
@@ -264,7 +276,13 @@ def CreateUserRecord(logger: Logger, user_db: UserDatabase) -> None:
 
     # Hash the password and remove from SMD.
     #   You can use r_psw to impose restrictions on the password.
-    hpsw = hashlib.sha256(r_psw := smd.get('psw', '').encode()).hexdigest()
+    try:
+        hpsw = hashlib.sha256(r_psw := smd.get('psw', '').encode()).hexdigest()
+    except Exception as _:
+        smd['psw'] = None
+        logger.log(LoggingLevel.ERROR, sc, 'Failed to create new user record: bad password.')
+        return
+
     smd['psw'] = None
 
     def failed_to_create_new_user(err: str) -> None:
