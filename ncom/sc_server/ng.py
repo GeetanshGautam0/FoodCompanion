@@ -138,7 +138,8 @@ class NGServer(__fc_server__):
                 self.__loops__[i][-1] = True  # Call for break.
                 self.log(LoggingLevel.ERROR, f'Loop "{name}" took too long (> {Settings.SETTINGS.LOOP_MAX_TIME_MIN * 60}s).')
 
-        self.log(LoggingLevel.INFO, f'_check_r_loop done; Start<{now}>')
+        # if AppInfo.APPINFO.LG_LOG_DEBUG:
+        self.log(LoggingLevel.DEBUG, f'_check_r_loop done; Start<{now}>')
         self._l_task.start()
 
     def register_loop(self, name: str) -> int:

@@ -1,28 +1,27 @@
 from std_imports import *
-from sc_server import *
 from threading import Thread
 import hashlib
 
 
-__logger = Logger(is_server=True)
+_logger = Logger(is_server=True)
 _s_data = ServerData(
-    logger=__logger,
-    patient_database=PTDatabase(__logger),
-    user_database=UserDatabase(__logger),
+    logger=_logger,
+    patient_database=PTDatabase(_logger),
+    user_database=UserDatabase(_logger),
     shutdown_tasks=[]
 )
 
+# Default admin user.
 admin_user = Structs.UserRecord(
     Structs.InstitutionID("FC"),
-    Structs.UserID(100),
-    [100],
+    Structs.UserID(0),
+    [ReservedAccessLevels.ADMINISTRATOR.value],
     hashlib.sha256(b'admin').hexdigest(),
-    Structs.FormattedName('ADMINISTRATOR, FC')
+    Structs.FormattedName('ADMINISTRATOR, DEFAULT')
 )
 
-if not _s_data.user_database._uid_in_db(admin_user.UID.value, admin_user.IID.value):
-    __logger.log(LoggingLevel.WARN, '__main__', 'No users found. Adding default admin user.')
-    _s_data.user_database.create_new_user(admin_user)
+# Make sure there is at least one admin user.
+_s_data.user_database.check_admin_user(admin_user)
 
 
 def eh(tp, *args) -> None:
@@ -106,14 +105,20 @@ class CLI:
 
     @staticmethod
     def new_user() -> None:
-        raise Exception
+        global _logger, _s_data
+        CreateUserRecord(logger=_logger, user_db=_s_data.user_database)
+
+    @staticmethod
+    def list_user() -> None:
+        global _logger, _s_data
+        ListUserRecords(logger=_logger, user_db=_s_data.user_database)
 
     commands = {
         'STOP':         ('Shutdown server and quit.', ls.__s_thread__.done),
         'HELP':         ('Show this information.', help_message),
         'NEW_USER':     ('Register a new user.', new_user),
         'REM_USER':     ('Remove a new user.', lambda *_, **__: CLI.not_impl('REM_USER')),
-        'LIST_USER':    ('Get a user list.', lambda *_, **__: CLI.not_impl('LIST_USER')),
+        'LIST_USER':    ('Get a user list.', list_user),
         'USER_ACCESS':  ('Manage user access', lambda *_, **__: CLI.not_impl('USER_ACCESS')),
     }
 

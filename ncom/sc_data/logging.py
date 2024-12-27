@@ -260,6 +260,9 @@ class Logger(Thread):
         ll_str = ll.name.upper()
         ll_pad_l = Logger.longest_level_name() - len(ll_str)
 
+        if not (logging_level_enabled := getattr(APPINFO, f'LG_LOG_{ll_str}')):
+            return ''
+
         sc_pad_l = self.longest_sc_l(sc_l := len(sc)) - sc_l
         log_str = f'[{ll_str}]{(" " * ll_pad_l) if ll_pad_l > 0 else ""} [FC%s{sc}]{(" " * sc_pad_l) if sc_pad_l > 0 else ""}' % (
             '@' if len(sc) else ''

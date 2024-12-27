@@ -2,7 +2,7 @@ from client_utils import *
 from threading import Thread
 
 
-__logger = Logger(is_server=False)
+_logger = Logger(is_server=False)
 
 #   -------------------------------------------------------------------------
 #   Uncomment the following to check for the server's ability to respond to
@@ -100,19 +100,19 @@ tests = [
 
 def test_all_commands():
     for command, form in tests:
-        client = ClientUtil(__logger)  # Create a client
+        client = ClientUtil(_logger)  # Create a client
         client.establish_session()   # Establish connection w/ NG server
 
         if client.connection_established:
                 sent, e = client.send_message(f'ECC {command}'.encode(), False, True)
                 if not sent:
-                    __logger.log(LoggingLevel.ERROR, 'NGClient', f'Could not send command {command} for test: {e}.')
+                    _logger.log(LoggingLevel.ERROR, 'NGClient', f'Could not send command {command} for test: {e}.')
                     client.close_session()
                     continue
 
                 recv_s, recv_b = client.get_response(1024)
                 if not recv_s:
-                    __logger.log(LoggingLevel.ERROR, 'NGClient', f'Could not recv for {command} for test.')
+                    _logger.log(LoggingLevel.ERROR, 'NGClient', f'Could not recv for {command} for test.')
                     client.close_session()
                     continue
 
@@ -128,23 +128,23 @@ def test_all_commands():
                     client.send_message(f'RFF {msg.decode()}', False, True)
 
                 except Exception as E:
-                    __logger.log(LoggingLevel.ERROR, 'NGClient', f'Test<{command}, {form}> failed w/ {msg=}; {str(E)}')
+                    _logger.log(LoggingLevel.ERROR, 'NGClient', f'Test<{command}, {form}> failed w/ {msg=}; {str(E)}')
                     client.close_session()
                     continue
 
                 else:
-                    __logger.log(LoggingLevel.INFO, 'NGClient', f'Test<{command}, {form}> PASS')
+                    _logger.log(LoggingLevel.INFO, 'NGClient', f'Test<{command}, {form}> PASS')
                     client.close_session()
 
         else:
-            __logger.log(LoggingLevel.ERROR, 'NGClient', 'Could not establish connection w/ server; ABORT.')
+            _logger.log(LoggingLevel.ERROR, 'NGClient', 'Could not establish connection w/ server; ABORT.')
             client.close_session()
 
 
 # for _ in range(100):
 #   test_all_commands()
 
-client = ClientUtil(__logger)
+client = ClientUtil(_logger)
 client.establish_session()
 
 client.send_message('ECC GET-P-DET')
@@ -156,5 +156,5 @@ print(client.send_message(f'RFF {msg.decode()}'))
 print(client.get_response(1024))
 
 client.close_session()
-__logger.stop()
+_logger.stop()
 sys.exit(0)

@@ -1,5 +1,5 @@
 import hashlib, rsa, sys
-from typing import Tuple
+from typing import Tuple, Callable, Any
 from . import constants as sc_const
 
 
@@ -117,3 +117,10 @@ def STRING_WITH_LINE_NUMBERS(s: str | bytes, prepend: str = '', ret_if: Tuple[in
             for line_number, line in enumerate(lines)
         ]
     )
+
+
+def TRY(fct: Callable[[...], Any], *args: Any, **kwargs: Any) -> Tuple[bool, Any]:
+    try:
+        return True, fct(*args, **kwargs)
+    except Exception as E:
+        return False, E

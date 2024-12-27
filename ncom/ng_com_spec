@@ -223,8 +223,8 @@ Accepted commands (updated 12/AUG/2024):
     "GET-U-LST"         Get a list of all users.                FORM-URC-1b                                         **
     "NEW-U-RCD"         Create a new user                       FORM-URC-2a                                         **
     "DEL-U-RCD"         Remove a user                           FORM-URC-2b                                         **      Cannot modify self
-    "NEW-U-ACC"         Add access level(s) to user             FORM-URC-3P                                         **      Cannot modify self; current user must be AL >= 3 (moderator); cannot modify access greater than current user's access.
-    "DEL-U-ACC"         Remove access level(s) from user        FORM-URC-3R                                         **      Cannot modify self; current user must be AL >= 3 (moderator); cannot modify access greater than current user's access.
+    "NEW-U-ACC"         Add access level(s) to user             FORM-URC-3P                                         **      Cannot modify self; current user must be AL <= 3 (moderator); cannot modify access greater than current user's access.
+    "DEL-U-ACC"         Remove access level(s) from user        FORM-URC-3R                                         **      Cannot modify self; current user must be AL <= 3 (moderator); cannot modify access greater than current user's access.
     "UPD-U-PSW"         Update user password hash (access code) FORM-URC-4                                          **
 
     -------------------------------------------------------------------------------------------------------------------------------------
