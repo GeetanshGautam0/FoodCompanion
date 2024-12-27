@@ -7,6 +7,7 @@ except ImportError:
 
 
 import sys, socket, re, select, rsa, hashlib, traceback, random, json
+from abc import abstractmethod
 from time import sleep, strftime, gmtime
 from datetime import datetime
 from threading import Thread, Event, Timer
@@ -385,6 +386,53 @@ class __fc_server__:
     def get_conn_info(self, conn_name: str) -> Tuple[__fc_thread__, socket.socket, Tuple[str, int]] | None:
         return self.__connectors__.get(conn_name)
 
+    def on_msg_capt(self, addr: Tuple[str, int], st: str | None, msg: str | bytes) -> None:
+        if isinstance(msg, bytes):
+            msg = msg.decode()
+
+        if AppInfo.APPINFO.LOG_TRANSMISSIONS:
+            # self.log(LoggingLevel.INFO, f'Received message {msg}')
+            self._log_as_client(addr, st, 'Received message \n{}'.format(
+                Functions.STRING_WITH_LINE_NUMBERS(msg, "\t", (0, ))
+            ))
+            pass
+
+    # -------- Abstract Methods -------
+
+    @abstractmethod
+    def _log_as_client(self, addr: Tuple[str, int], st: str | None, message: str) -> None:
+        pass
+
+    @abstractmethod
+    def _err_as_client(self, addr: Tuple[str, int], st: str | None, message: str) -> None:
+        pass
+
+    @abstractmethod
+    def _on_capture_event_(self, c_name: str | None) -> None:
+        """
+        Child classes must define _on_capture_event_(str | None) -> None with the following behaviour.
+
+        Expected behaviour:
+            * Handle any incoming messages
+            * Request more data if needed manually using __fc_server__.recv(N)
+            * If c_name is None, return Literal(PASS) immediately as this is a test to check if the listener is defined.
+            * If a session key is provided:
+                A. If the token is valid, add the c_name to __sessions__
+                B. If the token is invalid, return RESPONSES.ERRORS.INVALID_SESSION_ID
+            * Call on_msg_capt(...) with the DECRYPTED message.
+
+            Handle the data as needed.
+
+        Note:
+            It is recommended to run subroutines or exception-raising commands using __fc_server__.sf_execute to avoid
+            any threading errors.
+
+        :param c_name:
+        :return: None
+        """
+
+        pass
+
     # -------- Event Listeners --------
 
     def on_capture(self, c_name: str | None) -> None | LiteralString:
@@ -398,6 +446,7 @@ class __fc_server__:
             * If a session key is provided:
                 A. If the token is valid, add the c_name to __sessions__
                 B. If the token is invalid, return RESPONSES.ERRORS.INVALID_SESSION_ID
+            * Call on_msg_capt(...) with the DECRYPTED message.
 
             Handle the data as needed.
 
@@ -406,7 +455,7 @@ class __fc_server__:
             any threading errors.
 
         :param c_name:      Connector name/ID (str / None)
-        :return:            None
+        :return:            None | LiteralString
 
         :raises Exception:  Not Implemented Error
         """
@@ -414,7 +463,9 @@ class __fc_server__:
         oce = getattr(self, '_on_capture_event_', None)
 
         if oce is None:
-            return None
+            self.log(LoggingLevel.WARN, '_on_capture_event not implemented; skipping.')
+            return None  # Not implemented
 
         # return oce(c_name)
         return self.sf_execute(oce, c_name)[-1]
+

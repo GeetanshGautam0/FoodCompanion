@@ -43,8 +43,6 @@ class LegacyServer(__fc_server__):
             self.log_sc(LoggingLevel.ERROR, f'CLIENT<{addr[0]},{addr[1]} :: ST{st}> {message}', 'LGSRV')
 
     def _handle_new_conn(self, c_name: str, recv: bytes) -> None:
-        # TODO: Log transmissions.
-
         thread, conn, addr = self.__connectors__[c_name]
 
         recv = recv.strip()
@@ -66,6 +64,8 @@ class LegacyServer(__fc_server__):
             i += 1
 
             sleep(0.1)
+
+        self.on_msg_capt(addr, st, recv)
 
         if st in self.__sessions__:
             self._log_as_client(addr, None, 'Failed to generate session token.')
@@ -98,12 +98,9 @@ class LegacyServer(__fc_server__):
         conn.send(out)
 
     def _handle_old_conn(self, c_name: str, recv: bytes) -> None:
-        # TODO: Log transmissions.
-
         thread, conn, addr = self.__connectors__[c_name]
 
         hash_length = 64
-
         recv = recv.strip()
 
         assert not thread.is_done, Constants.RESPONSES.ERRORS.GENERAL
@@ -155,6 +152,7 @@ class LegacyServer(__fc_server__):
         assert isinstance(priv_key, rsa.PrivateKey), Constants.RESPONSES.ERRORS.INVALID_SESSION_ID
 
         dec = rsa.decrypt(TX_MSG, priv_key).decode()
+        self.on_msg_capt(addr, hdr.H_SES_TOK, dec)
         data = dec.split('~')
 
         assert len(data) == 3, Constants.RESPONSES.ERRORS.BAD_REQUEST

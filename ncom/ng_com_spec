@@ -223,8 +223,8 @@ Accepted commands (updated 12/AUG/2024):
     "GET-U-LST"         Get a list of all users.                FORM-URC-1b                                         **
     "NEW-U-RCD"         Create a new user                       FORM-URC-2a                                         **
     "DEL-U-RCD"         Remove a user                           FORM-URC-2b                                         **      Cannot modify self
-    "NEW-U-ACC"         Add access level(s) to user             FORM-URC-3P                                         **      Cannot modify self; current user must be AL >= 3 (moderator); cannot modify access greater than current user's access.
-    "DEL-U-ACC"         Remove access level(s) from user        FORM-URC-3R                                         **      Cannot modify self; current user must be AL >= 3 (moderator); cannot modify access greater than current user's access.
+    "NEW-U-ACC"         Add access level(s) to user             FORM-URC-3P                                         **      Cannot modify self; current user must be AL <= 3 (moderator); cannot modify access greater than current user's access.
+    "DEL-U-ACC"         Remove access level(s) from user        FORM-URC-3R                                         **      Cannot modify self; current user must be AL <= 3 (moderator); cannot modify access greater than current user's access.
     "UPD-U-PSW"         Update user password hash (access code) FORM-URC-4                                          **
 
     -------------------------------------------------------------------------------------------------------------------------------------
@@ -236,65 +236,65 @@ FUD:
     This date is formatted per the DATETIME format and is located at the end of the form, after the ">>" delimiter.
 
 FORM-PTR-1a
-    "PTR-1a<[&pid;].[&iid;].[&dob;]> >> [FUD]"
+    "PTR-1a<[&pid;].[&iid;].[&dob;]> >> [cert] >> [FUD]"
 
 FORM-PTR-1b
-    "PTR-1b<[&iid;].[&userID;].[&userAC;].[&txTime;]> >> [FUD]"
+    "PTR-1b<[&iid;].[&userID;].[&userAC;].[&txTime;]> >> [cert] >> [FUD]"
 
 FORM-PTR-1c
-    "PTR-1a<[&pid;].[&iid;].[&dob;].[&userID;].[&userAC;].[&txTime;]> >> [FUD]"
+    "PTR-1a<[&pid;].[&iid;].[&dob;].[&userID;].[&userAC;].[&txTime;]> >> [cert] >> [FUD]"
 
 FORM-PTR-2
-    "PTR-2 <[&pid;].[&iid;].[&dob;].[&pname].[&diet].[&userID;].[&userAC;].[&txTime;]> >> [FUD]"
+    "PTR-2 <[&pid;].[&iid;].[&dob;].[&pname].[&diet].[&userID;].[&userAC;].[&txTime;]> >> [cert] >> [FUD]"
 
 FORM-PTR-3a
-    "PTR-3a<[&pid;].[&iid;].[&dob;].[&diet].[&userID;].[&userAC;].[&txTime;]> >> [FUD]"
+    "PTR-3a<[&pid;].[&iid;].[&dob;].[&diet].[&userID;].[&userAC;].[&txTime;]> >> [cert] >> [FUD]"
 
 FORM-PTR-3b
-    "PTR-3b<[&pid;].[&iid;].[&dob;].[&field;].[&value;].[&userID;].[&userAC;].[&txTime;]> >> [FUD]"
+    "PTR-3b<[&pid;].[&iid;].[&dob;].[&field;].[&value;].[&userID;].[&userAC;].[&txTime;]> >> [cert] >> [FUD]"
 
 FORM-PTR-4
-    "PTR-4 <[&pid;].[&iid;].[&dob].[&userID;].[&userAC;].[&txTime;]> >> [FUD]"
+    "PTR-4 <[&pid;].[&iid;].[&dob].[&userID;].[&userAC;].[&txTime;]> >> [cert] >> [FUD]"
 
 FORM-FDR-1
-    "FDR-1 <[&name;].[&bld;].[&cat;].[&cal;].[&cst;].[&csu;].[&cfi;].[&ftr;].[&fsa;].[&pco;].[&pro;].[&ssc;].[&ssu;].[&odiets;].[&iid;].[&userID;].[&userAC;].[&txTime;]> >> [FUD]"
+    "FDR-1 <[&name;].[&bld;].[&cat;].[&cal;].[&cst;].[&csu;].[&cfi;].[&ftr;].[&fsa;].[&pco;].[&pro;].[&ssc;].[&ssu;].[&odiets;].[&iid;].[&userID;].[&userAC;].[&txTime;]> >> [cert] >> [FUD]"
 
 FORM-FDR-2
-    "FDR-2 <[&field;].[&value;].[&iid;].[&userID;].[&userAC;].[&txTime;]> >> [FUD]"
+    "FDR-2 <[&field;].[&value;].[&iid;].[&userID;].[&userAC;].[&txTime;]> >> [cert] >> [FUD]"
 
 FORM-FDR-3a
-    "FDR-3a<[&id;].[&diet;].[&iid;].[&userID;].[&userAC;].[&txTime;]> >> [FUD]"
+    "FDR-3a<[&id;].[&diet;].[&iid;].[&userID;].[&userAC;].[&txTime;]> >> [cert] >> [FUD]"
 
 FORM-FDR-3b
-    "FDR-3b<[&id;].[&diet;].[&iid;].[&userID;].[&userAC;].[&txTime;]> >> [FUD]"
+    "FDR-3b<[&id;].[&diet;].[&iid;].[&userID;].[&userAC;].[&txTime;]> >> [cert] >> [FUD]"
 
 FORM-FDR-4
-    "FDR-4 <[&name;].[&iid;].[&userID;].[&userAC;].[&txTime;]> >> [FUD]"
+    "FDR-4 <[&name;].[&iid;].[&userID;].[&userAC;].[&txTime;]> >> [cert] >> [FUD]"
 
 FORM-FDR-5
-    "FDR-5 <[&iid;]> >> [FUD]"
+    "FDR-5 <[&iid;]> >> [cert] >> [FUD]"
 
 FORM-URC-1a
              | ---------- Login credentials --------| | User to get |
-    "URC-1a<[&iid;].[&userID;].[&userAC;].[%txTime;].[&nUserID;]> >> [FUD]"
+    "URC-1a<[&iid;].[&userID;].[&userAC;].[%txTime;].[&nUserID;]> >> [cert] >> [FUD]"
 
 FORM-URC-1b
-    "URC-1b<[&iid;].[&userID;].[&userAC;].[%txTime;]> >> [FUD]"
+    "URC-1b<[&iid;].[&userID;].[&userAC;].[%txTime;]> >> [cert] >> [FUD]"
 
 FORM-URC-2a
-    "URC-2a<[&iid;].[&userID;].[&userAC;].[%txTime;].[&nUserID;].[&nUserAC;].[&access;]> >> [FUD]"
+    "URC-2a<[&iid;].[&userID;].[&userAC;].[%txTime;].[&nUserID;].[&nUserAC;].[&access;]> >> [cert] >> [FUD]"
 
 FORM-URC-2b
-    "URC-2b<[&iid;].[&userID;].[&userAC;].[%txTime;].[&nUserID;].[&nUserAC;]> >> [FUD]"
+    "URC-2b<[&iid;].[&userID;].[&userAC;].[%txTime;].[&nUserID;].[&nUserAC;]> >> [cert] >> [FUD]"
 
 FORM-URC-3P
-    "URC-3P<[&iid;].[&userID;].[&userAC;].[%txTime;].[&nUserID;].[&access;]> >> [FUD]"
+    "URC-3P<[&iid;].[&userID;].[&userAC;].[%txTime;].[&nUserID;].[&access;]> >> [cert] >> [FUD]"
 
 FORM-URC-3R
-    "URC-3R<[&iid;].[&userID;].[&userAC;].[%txTime;].[&nUserID;].[&access;]> >> [FUD]"
+    "URC-3R<[&iid;].[&userID;].[&userAC;].[%txTime;].[&nUserID;].[&access;]> >> [cert] >> [FUD]"
 
 FORM-URC-4
-    "URC-4 <[&iid;].[&userID;].[&userAC;].[%txTime;].[&nUserID;].[&nUserAC;].[&newAC;]> >> [FUD]"
+    "URC-4 <[&iid;].[&userID;].[&userAC;].[%txTime;].[&nUserID;].[&nUserAC;].[&newAC;]> >> [cert] >> [FUD]"
 
 
 Responses:

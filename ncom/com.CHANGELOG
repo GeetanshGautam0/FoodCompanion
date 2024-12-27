@@ -72,12 +72,17 @@ Bugfix:
 * Removed the '<end>' string appended to messages sent by `ng._con_conn`.
 * Changed Structs.Transmission to accommodate `NoneType` headers.
 
-
+12/24/2024
+* Log transmissions.
+    - Added a setting in ncom.config to disable.
+    - Added abstract declarations in sc_server/_template.py for _log_as_client and _err_as_client functions
+    - Subclasses of __fc_server__ should now call on_msg_capt once they have a decrypted message.
+        - Arguments addr and st follow the same conventions as _log_as_client and _err_as_client;
+        - Argument msg may be of type bytes or str.
+    - Added a WARN log when _oce is not implemented.
+* Added a new function STRING_WITH_LINE_NUMBERS to, well, return a string with line numbers.
 
 TODO:
 * Add a system to check that repeat commands are not issued w/ the same TX time (to make sure that transmissions cannot be cloned)
-* Add a CLI for modifying user records.
-* Log transmissions.
-    - Add a toggle (setting) for that
-* Rework logging system to make .hf files more efficient.
-    - Unify .hf file generation for more (stability ?)
+* Add CLI functions for modifying user records.
+

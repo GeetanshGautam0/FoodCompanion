@@ -9,6 +9,7 @@ from .diets import get_diet_name
 from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Callable, List, Dict, Type, Tuple
+from .defines import *
 
 
 SLogger: Logger
@@ -559,6 +560,35 @@ class UserDatabase(SQLDatabase):
     def _uid_in_db(self, uid: int, iid: str) -> bool:
         return len(self.read(SQLReadMode.FETCH_ALL, uid=uid, iid=iid)[-1][-1]) > 0
 
+    def check_admin_user(self, default_admin_user: Structs.UserRecord) -> None:
+        sc = 'DBManager.UserDB.CAU'
+        self.log(LoggingLevel.INFO, sc, 'Checking for at least one admin user.')
+
+        users = self.get_user_list()
+        for user in users:
+            if min(user.ACCESS) <= ReservedAccessLevels.ADMINISTRATOR.value:  # At least one user had ADMIN or higher AL
+                self.log(LoggingLevel.INFO, sc, f'At least one user has AL ADMINISTRATOR or higher.')
+                return
+
+        # We end up here if no users with administrative privileges were found.
+        self.log(LoggingLevel.ERROR, sc, 'No users w/ AL ADMINISTRATOR or higher found.')
+        self.log(LoggingLevel.WARN, sc, 'Adding default admin user record.')
+
+        if self._uid_in_db(default_admin_user.UID.value, default_admin_user.IID.value):
+            # Find the record.
+            conflicting_user = None
+            for user in users:
+                if user.IID.value == default_admin_user.IID.value and user.UID.value == default_admin_user.UID.value:
+                    conflicting_user = user
+                    break
+
+            assert isinstance(conflicting_user, Structs.UserRecord), 'InternalError'
+
+            self.log(LoggingLevel.WARN, sc, f'Removing conflicting user record {conflicting_user}.')
+            self.delete_user(conflicting_user)
+
+        self.create_new_user(default_admin_user)
+
     def validate_credentials(self, uid: int, iid: str, psw: str) -> bool:
         # True: valid user
         # False: invalid user
@@ -723,7 +753,10 @@ class UserDatabase(SQLDatabase):
 
         old = user.ACCESS
 
+        # wtf is this assertion. why did i type this. i'm too scared to remove it. don't @ me.
+        # might as well add a bunch of "assert True" statements.
         assert user.ACCESS.pop(user.ACCESS.index(access_level)) == access_level
+
         updated = self.update_user_data(user, 'access', user.ACCESS)
 
         if not updated:

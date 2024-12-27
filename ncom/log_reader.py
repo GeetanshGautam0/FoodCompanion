@@ -3,22 +3,26 @@ from tkinter import filedialog
 from std_imports import *
 
 lFile = filedialog.askopenfilename(initialdir=f'{AppInfo.APPINFO.APP_DATA_PATH}')
-logs = (lp := LogParser(File(lFile))).get_logs()
-lines = [[t, l, s, d.replace('\u27f9', '->')] for (l, s, t, d) in logs]
+print(f'Calling LogParser on "{lFile}"')
+logs = (lp := LogParser(File(lFile))).get_logs(print_progress=True)
 
-labels = [
-    'TIME',
-    'LEVEL',
-    'SC',
-    'DATA'
-]
+labels = ['TIME', 'LEVEL', 'SC', 'DATA']
+lengths = [len(l) for l in labels]
+lines = []
 
-lengths = [
-    t if (t := max([len(l[0]) for l in lines])) > len(labels[0]) else len(labels[0]),
-    t if (t := max([len(l[1]) for l in lines])) > len(labels[1]) else len(labels[1]),
-    t if (t := max([len(l[2]) for l in lines])) > len(labels[2]) else len(labels[2]),
-    len(labels[3])
-]
+RED = lambda i, t: l0 if (l0 := len(str(t))) > (l1 := lengths[i]) else l1
+
+for i, (t, l, s, d) in enumerate(logs):
+    if not ((i + 1) % 10):  # every 10 lines
+        print(f'Processing log {i+1}/{len(logs)} (STEP 1/2; {(i+1)/len(logs) * 100}%)')
+
+    lines.append((t, l, s, d.replace('\u27f9', '->')))
+
+    lengths[0] = RED(0, t)
+    lengths[1] = RED(1, l)
+    lengths[2] = RED(2, s)
+    lengths[3] = RED(3, d)
+
 
 const = '%s%s%s%s\n' % (
     labels[0].ljust(lengths[0] + 1),
@@ -27,7 +31,10 @@ const = '%s%s%s%s\n' % (
     labels[3].ljust(lengths[3] + 1),
 )
 
-for t, l, s, d in lines:
+for i, (t, l, s, d) in enumerate(lines):
+    if not ((i + 1) % 10):  # every 10 lines
+        print(f'Constructing logfile {i+1}/{len(logs)} (STEP 2/2; {(i+1)/len(logs) * 100}%)')
+
     const += str(t).ljust(lengths[0] + 1)
     const += str(l).ljust(lengths[1] + 1)
     const += str(s).ljust(lengths[2] + 1)
