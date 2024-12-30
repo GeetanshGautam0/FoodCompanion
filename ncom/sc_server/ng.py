@@ -9,7 +9,7 @@ except ImportError:
 
 import sys, rsa, hashlib, uuid, json
 from datetime import datetime, timedelta
-from typing import cast, Tuple, List, Set
+from typing import cast, Tuple, List, Set, Dict, Any
 from threading import Timer
 
 
@@ -462,6 +462,7 @@ class NGServer(__fc_server__):
         assert len(cert) == (32 + Constants.SZ.DATETIME), f'E002b fCertL'
         assert len(fud) == vsl, f'E002c fFUDL'
         assert fud.decode() == vs, f'E002c-2 fFUDc'
+        assert hdr.H_SES_TOK in self.__sessions__, 'E002d fST'
 
         form_id = body[:6].strip().decode()
         forms_sent = self.__sessions__[hdr.H_SES_TOK].get('Forms', [])
@@ -473,13 +474,129 @@ class NGServer(__fc_server__):
             if (form_sent == form_id) and (cert_sent == cert.decode()):
                 t = (form_sent, cert_sent)
 
-        assert len(t) == 2, ' E003-2 CERTIFICATE_ERROR'
+        assert len(t) == 2, 'E003-2 CERTIFICATE_ERROR'
         # assert (t := (form_id, e_cert)) in self.__sessions__[hdr.H_SES_TOK].get('Forms', []), 'E003-2 CERTIFICATE_ERROR'
 
         self.log(LoggingLevel.INFO, f'RFF-CHECK: Successfully verified RFF req w/ {form_id=} cert={t[-1]}')
+
+        # If we get to this point then the for loop must have iterated through at least 1 item; that is, 'Forms'
+        # must have existed in __sessions__[st]; no need to guard against it w/ __sessions__.get()
         self.__sessions__[hdr.H_SES_TOK]['Forms'].pop(self.__sessions__[hdr.H_SES_TOK]['Forms'].index(t))
 
-        return 'NotImplemented'
+        # TODO: Handle the form reply appropriately (the above only verifies that the form sent back is good!)
+        # TODO: Remove the form's cert from the sessions dict and log things appropriately.
+        return self.parse_rff_request(c_name, form_id, Forms.get_form_str(t[0], 'SAMPLE'), msg.decode(), hdr)
+
+    def parse_rff_fields(self, form_sent: str, returned_form: str) -> Dict[str, Any]:
+        def read_fields(s: str) -> List[str]:
+            out = []
+            started, start_index = False, 0
+            for i, char in enumerate(s):
+                next_char = s[i+1]
+
+                match char:
+                    case '[':
+                        if started:
+                            continue
+
+                        started = True
+                        start_index = i + 1
+
+                    case ']':
+                        if not started:
+                            continue
+
+                        if next_char not in ('.', '>'):
+                            continue
+
+                        started = False
+                        out.append(s[start_index:i])
+
+                        if next_char == '>':
+                            break
+
+            return out
+
+        # Ordered!
+        r_fields = read_fields(returned_form)
+        s_fields = read_fields(form_sent)
+
+        return {k[1:-1]: getattr(Forms.FormItems, k[1:-1])[-1](v) for k, v in zip(s_fields, r_fields, strict=True)}
+
+    def PTR_1a_handler(self, c_name: str, fields: Dict[str, Any]) -> str:
+        return 'ok'
+
+    def PTR_1b_handler(self, c_name: str, fields: Dict[str, Any]) -> str:
+        pass
+
+    def PTR_1c_handler(self, c_name: str, fields: Dict[str, Any]) -> str:
+        pass
+
+    def PTR_2_handler(self, c_name: str, fields: Dict[str, Any]) -> str:
+        pass
+
+    def PTR_3a_handler(self, c_name: str, fields: Dict[str, Any]) -> str:
+        pass
+
+    def PTR_3b_handler(self, c_name: str, fields: Dict[str, Any]) -> str:
+        pass
+
+    def PTR_4_handler(self, c_name: str, fields: Dict[str, Any]) -> str:
+        pass
+
+    def FDR_1_handler(self, c_name: str, fields: Dict[str, Any]) -> str:
+        pass
+
+    def FDR_2_handler(self, c_name: str, fields: Dict[str, Any]) -> str:
+        pass
+
+    def FDR_3a_handler(self, c_name: str, fields: Dict[str, Any]) -> str:
+        pass
+
+    def FDR_3b_handler(self, c_name: str, fields: Dict[str, Any]) -> str:
+        pass
+
+    def FDR_4_handler(self, c_name: str, fields: Dict[str, Any]) -> str:
+        pass
+
+    def FDR_5_handler(self, c_name: str, fields: Dict[str, Any]) -> str:
+        pass
+
+    def URC_1a_handler(self, c_name: str, fields: Dict[str, Any]) -> str:
+        pass
+
+    def URC_1b_handler(self, c_name: str, fields: Dict[str, Any]) -> str:
+        pass
+
+    def URC_2a_handler(self, c_name: str, fields: Dict[str, Any]) -> str:
+        pass
+
+    def URC_2b_handler(self, c_name: str, fields: Dict[str, Any]) -> str:
+        pass
+
+    def URC_3P_handler(self, c_name: str, fields: Dict[str, Any]) -> str:
+        pass
+
+    def URC_3R_handler(self, c_name: str, fields: Dict[str, Any]) -> str:
+        pass
+
+    def URC_4_handler(self, c_name: str, fields: Dict[str, Any]) -> str:
+        pass
+
+    def parse_rff_request(self, c_name: str, form_id: str, form_sent: str, msg_body: str, hdr: Structs.NGHeader) -> str:
+        # Pass the request down to the appropriate handler.
+        handler_function = getattr(self, f'{form_id.strip().replace("-", "_")}_handler', None)
+        if handler_function is None:
+            return 'ERR.RQST Bad form ID.'
+
+        fields_extracted, fields = self.sf_execute(self.parse_rff_fields, form_sent, msg_body)
+        if not fields_extracted:
+            return 'ERR.RQST Incorrectly filled form.'
+
+        addr = self.__connectors__[c_name][2]
+        self._log_as_client(addr, hdr.H_SES_TOK, f'_parse_rff_req: {handler_function}(*{fields})')
+
+        return handler_function(c_name, fields)
 
     def _con_conn(self, c_name: str, hdr: Header.NGHeader, recv: bytes) -> None:
         thread, conn, addr = self.__connectors__[c_name]

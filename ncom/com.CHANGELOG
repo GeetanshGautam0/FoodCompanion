@@ -82,7 +82,18 @@ Bugfix:
     - Added a WARN log when _oce is not implemented.
 * Added a new function STRING_WITH_LINE_NUMBERS to, well, return a string with line numbers.
 
+12/29/2024
+* (db manager) Converted __fc_server__._shutdown to an abstract function.
+* (client.py) Added temporary code to test RFF requests.
+* (diets.py) Added warnings that functions are not implemented.
+* (legacy.py) Added more logging
+* (ng.py) Added boilerplate for handling RFF requests.
+
+Bugfix:
+* pass values as str and int to _pid_in_db in get_patient_record.
+
 TODO:
 * Add a system to check that repeat commands are not issued w/ the same TX time (to make sure that transmissions cannot be cloned)
-* Add CLI functions for modifying user records.
+* Add CLI commands for modifying PT records.
+* Implement functions in diets.py
 
