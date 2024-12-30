@@ -151,8 +151,12 @@ client.send_message('ECC GET-P-DET')
 _, msg = client.verify(client.parse(client.get_response(1024)[-1]))
 client.close_socket()
 
-print(msg)
-print(client.send_message(f'RFF {msg.decode()}'))
+msg_str = msg.decode()
+msg_str = (msg_str.replace('&dob;', '20000101').replace('&iid;', 'FC')
+           .replace('&pid;', '1'))
+
+print(f'{msg_str=}')
+print(client.send_message(f'RFF {msg_str}'))
 print(client.get_response(1024))
 
 client.close_session()

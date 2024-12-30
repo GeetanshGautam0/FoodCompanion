@@ -793,7 +793,7 @@ class PTDatabase(SQLDatabase):
         date_of_birth: Structs.FormattedDate,
     ) -> Structs.PT | None:
         # If the ID does not exist at the facility then return immediately.
-        if not self._pid_in_db(patient_id, facility_id):
+        if not self._pid_in_db(patient_id.value, facility_id.value):
             return None
 
         res = self.read(

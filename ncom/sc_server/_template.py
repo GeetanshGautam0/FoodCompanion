@@ -214,9 +214,6 @@ class __fc_server__:
         else:
             self.logger.log(LoggingLevel.WARN, 'ServerTemplate', f'ServerManager<{self.__net__[0]},{self.__net__[1]}> - No sessions to log.')
 
-    def _shutdown(self) -> None:
-        raise Exception("Not Implemented.")
-
     def _close_socket(self, c_name: str) -> None:
         if c_name not in self.__connectors__:
             return
@@ -386,18 +383,11 @@ class __fc_server__:
     def get_conn_info(self, conn_name: str) -> Tuple[__fc_thread__, socket.socket, Tuple[str, int]] | None:
         return self.__connectors__.get(conn_name)
 
-    def on_msg_capt(self, addr: Tuple[str, int], st: str | None, msg: str | bytes) -> None:
-        if isinstance(msg, bytes):
-            msg = msg.decode()
-
-        if AppInfo.APPINFO.LOG_TRANSMISSIONS:
-            # self.log(LoggingLevel.INFO, f'Received message {msg}')
-            self._log_as_client(addr, st, 'Received message \n{}'.format(
-                Functions.STRING_WITH_LINE_NUMBERS(msg, "\t", (0, ))
-            ))
-            pass
-
     # -------- Abstract Methods -------
+
+    @abstractmethod
+    def _shutdown(self) -> None:
+        pass
 
     @abstractmethod
     def _log_as_client(self, addr: Tuple[str, int], st: str | None, message: str) -> None:
@@ -434,6 +424,26 @@ class __fc_server__:
         pass
 
     # -------- Event Listeners --------
+
+    def on_msg_capt(self, addr: Tuple[str, int], st: str | None, msg: str | bytes) -> None:
+        """
+        To be called by _OCE implementation.
+
+        :param addr: Address of client
+        :param st:   Session token of client.
+        :param msg:  UNENCRYPTED message received.
+        :return:     None
+        """
+
+        if isinstance(msg, bytes):
+            msg = msg.decode()
+
+        if AppInfo.APPINFO.LOG_TRANSMISSIONS:
+            # self.log(LoggingLevel.INFO, f'Received message {msg}')
+            self._log_as_client(addr, st, 'Received message \n{}'.format(
+                Functions.STRING_WITH_LINE_NUMBERS(msg, "\t", (0, ))
+            ))
+            pass
 
     def on_capture(self, c_name: str | None) -> None | LiteralString:
         """

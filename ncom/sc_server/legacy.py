@@ -175,6 +175,7 @@ class LegacyServer(__fc_server__):
         self.__sessions__[hdr.H_SES_TOK]['IsActive'] = False  # session ID may not be used anymore.
 
         meal_options = legacy_mo_format(get_meal_options(diet.id))
+        self._log_as_client(addr, hdr.H_SES_TOK, f'Send: LegacyMOFormat<{meal_options}>')
 
         conn.send(json.dumps(meal_options, indent=4).encode())
 
